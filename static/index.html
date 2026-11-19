@@ -309,8 +309,15 @@
                                 <span class="detection-badge" id="detectionBadge">✨ نتیجه تحلیل تصویر</span>
                                 <span class="detection-note" id="detectionNote"></span>
                             </div>
+                            <div class="form-group" id="detectedDetailsBox" style="display: none; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                                    <span style="font-size: 0.84rem; font-weight: 700; color: #a5b4fc;">🔍 جزئیات دقیق و موشکافانه شناسایی‌شده:</span>
+                                    <span id="detectedStyleBadge" class="btn-chip" style="font-size: 0.75rem; padding: 2px 8px; cursor: default;"></span>
+                                </div>
+                                <p id="detectedDetailsText" style="margin: 0; font-size: 0.88rem; color: var(--text-primary); line-height: 1.5;"></p>
+                            </div>
                             <div class="form-group">
-                                <label for="detectedName">نام پیشنهادی لباس:</label>
+                                <label for="detectedName">نام پیشنهادی کامل و دقیق لباس:</label>
                                 <input type="text" id="detectedName">
                             </div>
                             <div class="form-row">
