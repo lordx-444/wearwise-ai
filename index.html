@@ -317,15 +317,26 @@
                                 <div class="form-group">
                                     <label for="detectedCategory">دسته‌بندی:</label>
                                     <select id="detectedCategory">
-                                        <option value="کاپشن">کاپشن</option>
-                                        <option value="پالتو">پالتو و بارانی</option>
-                                        <option value="هودی">هودی و سویشرت</option>
+                                        <option value="اکسسوری">اکسسوری (ساعت، عینک، کلاه)</option>
+                                        <option value="کفش">کفش و کتانی</option>
+                                        <option value="شلوار">شلوار</option>
                                         <option value="پیراهن">پیراهن</option>
                                         <option value="تیشرت">تیشرت</option>
-                                        <option value="شلوار">شلوار</option>
-                                        <option value="کفش">کفش و کتانی</option>
-                                        <option value="اکسسوری">اکسسوری</option>
+                                        <option value="هودی">هودی و سویشرت</option>
+                                        <option value="پلیور">پلیور و بافت</option>
+                                        <option value="کاپشن">کاپشن</option>
+                                        <option value="پالتو">پالتو و بارانی</option>
                                     </select>
+                                    <!-- Quick 1-Click Category Buttons -->
+                                    <div class="quick-category-pills" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
+                                        <button type="button" class="btn-chip" onclick="quickSetCategory('اکسسوری', 'ساعت مچی')">⌚ ساعت مچی</button>
+                                        <button type="button" class="btn-chip" onclick="quickSetCategory('اکسسوری', 'عینک / کلاه')">👓 اکسسوری</button>
+                                        <button type="button" class="btn-chip" onclick="quickSetCategory('کفش', 'کتانی یا کفش')">👟 کفش</button>
+                                        <button type="button" class="btn-chip" onclick="quickSetCategory('شلوار', 'شلوار')">👖 شلوار</button>
+                                        <button type="button" class="btn-chip" onclick="quickSetCategory('پیراهن', 'پیراهن یا تیشرت')">👕 پیراهن</button>
+                                        <button type="button" class="btn-chip" onclick="quickSetCategory('هودی', 'هودی یا دورس')">🧥 هودی</button>
+                                        <button type="button" class="btn-chip" onclick="quickSetCategory('کاپشن', 'کاپشن بادی')">🧥 کاپشن</button>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label for="detectedColor">رنگ:</label>
@@ -863,6 +874,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="app.js?v=3.6"></script>
+    <script src="app.js?v=3.7"></script>
 </body>
 </html>
