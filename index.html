@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WearWise AI | دستیار هوشمند انتخاب لباس و استایل</title>
+    <!-- Google Fonts: Vazirmatn -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="style.css?v=3.3">
+</head>
+<body>
+    <!-- Background Ambient Glows -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <!-- Top Navigation / Header -->
+        <header class="app-header glass-card">
+            <div class="brand">
+                <div class="brand-icon">
+                    <span class="icon-sparkle">✨</span>
+                    <span class="icon-coat">🧥</span>
+                </div>
+                <div class="brand-text">
+                    <h1>WearWise AI</h1>
+                    <span class="brand-tagline">دستیار هوشمند استایل مبتنی بر آب‌وهوا و کمد شخصی</span>
+                </div>
+            </div>
+
+            <!-- Controls: Search, GPS, Occasion, Style, Wardrobe Mode, Profile, Theme, Lang -->
+            <div class="header-controls">
+                <!-- Location Search with Autocomplete Dropdown -->
+                <div class="search-wrapper">
+                    <div class="search-box">
+                        <input type="text" id="cityInput" placeholder="جستجوی شهر (فارسی یا انگلیسی...)" value="تهران" autocomplete="off">
+                        <button id="searchBtn" class="btn-icon" title="جستجوی آب‌وهوا">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </button>
+                        <button id="gpsBtn" class="btn-secondary" title="موقعیت مکانی خودکار (GPS / IP)">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                            <span id="gpsBtnText">موقعیت من</span>
+                        </button>
+                    </div>
+                    <!-- Autocomplete Dropdown List -->
+                    <div id="cityDropdown" class="city-dropdown glass-card" style="display: none;"></div>
+                </div>
+
+                <!-- Destination / Occasion Selector (کجا می‌خوای بری؟) -->
+                <div class="control-group">
+                    <label for="destinationSelect" class="control-label" id="destLabel">مقصد / برنامه:</label>
+                    <div class="select-wrapper">
+                        <select id="destinationSelect">
+                            <option value="محل کار / اداری" selected>🏢 محل کار / اداری</option>
+                            <option value="دانشگاه و درس">🎓 دانشگاه و مدرسه</option>
+                            <option value="کافه و قرار دوستانه">☕ کافه و قرار دوستانه</option>
+                            <option value="ورزش و پیاده‌روی">🏃 ورزش و فعالیت بدنی</option>
+                            <option value="مهمانی و رویداد شبانه">🎉 مهمانی و دورهمی</option>
+                            <option value="سفر و گردش شهری">✈️ سفر و گردشگری</option>
+                            <option value="خانه و راحتی">🛋️ خانه و راحتی روزمره</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Style Selector -->
+                <div class="control-group">
+                    <label for="styleSelect" class="control-label" id="styleLabel">سبک استایل:</label>
+                    <div class="select-wrapper">
+                        <select id="styleSelect">
+                            <option value="Mixed" selected>ترکیبی (Mixed)</option>
+                            <option value="Casual">راحتی و کژوال (Casual)</option>
+                            <option value="Sport">ورزشی و اسپرت (Sport)</option>
+                            <option value="Formal">رسمی و کلاسیک (Formal)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Wardrobe Toggle -->
+                <div class="toggle-control" title="استفاده از لباس‌های ثبت‌شده در کمد اختصاصی شما">
+                    <label class="switch">
+                        <input type="checkbox" id="wardrobeToggle" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label" id="wardrobeToggleLabel">کمد شخصی من</span>
+                </div>
+
+                <!-- User Profile Button -->
+                <button id="profileBtn" class="btn-profile-status" title="تنظیم پروفایل کاربر (جنسیت، سن، سایز و حساسیت به دما)">
+                    <span class="profile-icon">👤</span>
+                    <span id="profileStatusText">پروفایل من</span>
+                </button>
+
+                <!-- Color Theme Selector -->
+                <div class="theme-wrapper" title="تغییر تن رنگی و تم قالب">
+                    <select id="themeSelect" class="select-theme">
+                        <option value="indigo" selected>🌌 لوکس نیلی</option>
+                        <option value="emerald">🌲 زمردی شب</option>
+                        <option value="amber">🌅 کهربایی گرم</option>
+                        <option value="sapphire">🌊 یاقوت اقیانوسی</option>
+                        <option value="light">☀️ روز روشن</option>
+                    </select>
+                </div>
+
+                <!-- Language Switcher -->
+                <div class="lang-wrapper" title="انتخاب زبان (Language)">
+                    <select id="langSelect" class="select-lang">
+                        <option value="fa" selected>🇮🇷 فارسی</option>
+                        <option value="en">🇬🇧 English</option>
+                        <option value="tr">🇹🇷 Türkçe</option>
+                        <option value="ar">🇸🇦 العربية</option>
+                    </select>
+                </div>
+
+                <!-- API Key Settings Button -->
+                <button id="apiKeyBtn" class="btn-api-status" title="تنظیم کلید هوش مصنوعی Google Gemini">
+                    <span class="status-dot" id="apiStatusDot"></span>
+                    <span id="apiStatusText">هوش مصنوعی</span>
+                </button>
+
+                <!-- Cloud Sync Button -->
+                <button id="syncModalBtn" class="btn-sync-status" title="همگام‌سازی ابری کمد و انتقال بین گوشی و کامپیوتر">
+                    <span class="sync-icon">☁️</span>
+                    <span id="syncStatusText">همگام‌سازی دستگاه‌ها</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs glass-card">
+            <button class="tab-btn active" data-tab="recommendTab">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                <span>پیشنهادات استایل</span>
+            </button>
+            <button class="tab-btn" data-tab="wardrobeTab">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47a1 1 0 00.99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 002-2V10h2.15a1 1 0 00.99-.84l.58-3.47a2 2 0 00-1.34-2.23z"></path></svg>
+                <span>کمد لباس من (<span id="wardrobeBadgeCount">0</span>)</span>
+            </button>
+            <button class="tab-btn" data-tab="historyTab">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>تاریخچه و علاقه‌مندی‌ها</span>
+            </button>
+        </nav>
+
+        <!-- Tab 1: Recommendations & Weather -->
+        <main id="recommendTab" class="tab-content active">
+            <!-- Weather Section -->
+            <section class="weather-section glass-card" id="weatherCard">
+                <div class="weather-main-grid">
+                    <!-- Current Conditions -->
+                    <div class="weather-current">
+                        <div class="weather-location-info">
+                            <span class="location-badge" id="weatherCityName">تهران</span>
+                            <span class="live-pulse"></span>
+                            <span class="weather-time" id="weatherUpdateTime">بروزرسانی زنده</span>
+                        </div>
+                        <div class="weather-temp-row">
+                            <div class="weather-icon-large" id="currentWeatherIcon">☀️</div>
+                            <div class="weather-temp-wrap">
+                                <span class="temp-val" id="currentTemp">--</span>
+                                <span class="temp-unit">°C</span>
+                            </div>
+                            <div class="weather-desc-wrap">
+                                <span class="weather-desc" id="weatherDesc">در حال دریافت...</span>
+                                <span class="apparent-temp">دمای حسی: <strong id="apparentTemp">--</strong>°C</span>
+                            </div>
+                        </div>
+
+                        <!-- Weather Metrics Tags -->
+                        <div class="weather-metrics">
+                            <div class="metric-chip">
+                                <span class="metric-icon">💧</span>
+                                <span class="metric-title">رطوبت:</span>
+                                <span class="metric-val" id="humidityVal">--%</span>
+                            </div>
+                            <div class="metric-chip">
+                                <span class="metric-icon">💨</span>
+                                <span class="metric-title">باد:</span>
+                                <span class="metric-val" id="windVal">-- km/h</span>
+                            </div>
+                            <div class="metric-chip">
+                                <span class="metric-icon">🌧️</span>
+                                <span class="metric-title">بارندگی:</span>
+                                <span class="metric-val" id="precipVal">۰ mm</span>
+                            </div>
+                            <div class="metric-chip" id="rainAlertChip">
+                                <span class="metric-icon">☂️</span>
+                                <span class="metric-title">وضعیت چتر:</span>
+                                <span class="metric-val" id="umbrellaStatus">بررسی...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hourly Breakdown (Morning, Afternoon, Evening, Night) -->
+                    <div class="weather-timeline-col">
+                        <h3 class="section-subtitle">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                            تغییرات دمایی در طول روز (تحلیل ۴ مرحله‌ای)
+                        </h3>
+                        <div class="timeline-cards" id="timelineCards">
+                            <!-- Populated dynamically via JS -->
+                            <div class="timeline-skeleton">در حال دریافت داده‌های هواشناسی...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Generate Outfit Button Bar -->
+                <div class="generate-bar">
+                    <button id="generateBtn" class="btn-primary-glow">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        <span>پیشنهاد ست لباس با هوش مصنوعی</span>
+                    </button>
+                    <span class="generate-hint">بر اساس تحلیل همزمان آب‌وهوای امروز، دمای متغیر و کمد لباس شما</span>
+                </div>
+            </section>
+
+            <!-- Recommendations Area -->
+            <section class="recommendations-container" id="recommendationsContainer">
+                <!-- AI Reasoning Summary Banner -->
+                <div class="ai-summary-card glass-card" id="aiSummaryCard" style="display: none;">
+                    <div class="summary-header">
+                        <div class="summary-title-wrap">
+                            <span class="ai-badge">Gemini AI</span>
+                            <h3>تحلیل جامع هوا و منطق طراحی استایل</h3>
+                        </div>
+                        <div id="umbrellaBanner" class="umbrella-badge">
+                            <!-- Dynamic umbrella status -->
+                        </div>
+                    </div>
+                    <p class="summary-text" id="aiSummaryText"></p>
+                    <p class="reason-text" id="aiReasonText"></p>
+                </div>
+
+                <!-- Outfits Grid -->
+                <div class="outfits-grid" id="outfitsGrid">
+                    <!-- Populated dynamically via JS -->
+                </div>
+
+                <!-- Regenerate Alternative Outfits Button Bar -->
+                <div class="regenerate-bar" id="regenerateBar" style="display: none;">
+                    <button id="regenerateOutfitsBtn" class="btn-refresh-outfits">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        <span id="regenerateBtnText">🔄 پیشنهادهای دیگر (تولید ست‌های تازه)</span>
+                    </button>
+                    <span class="refresh-hint" id="refreshHintText">ترکیب‌ها و لایه‌بندی‌های متنوع دیگر متناسب با سلیقه، جنسیت و مقصد شما</span>
+                </div>
+            </section>
+        </main>
+
+        <!-- Tab 2: Wardrobe Management -->
+        <section id="wardrobeTab" class="tab-content">
+            <div class="wardrobe-header glass-card">
+                <div class="wardrobe-intro">
+                    <h2>مدیریت کمد لباس شخصی</h2>
+                    <p>لباس‌های خود را به صورت دستی اضافه کنید یا با <strong>آپلود عکس</strong>، هوش مصنوعی Gemini Vision آن‌ها را به طور خودکار شناسایی و تفکیک می‌کند.</p>
+                </div>
+                <div class="wardrobe-stats">
+                    <div class="stat-pill">
+                        <span class="stat-number" id="totalWardrobeItems">۰</span>
+                        <span class="stat-text">آیتم ثبت‌شده</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="wardrobe-layout">
+                <!-- Add Items Panel -->
+                <div class="wardrobe-add-panel glass-card">
+                    <h3>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"></path></svg>
+                        افزودن لباس جدید
+                    </h3>
+
+                    <!-- Tab Switcher between Addition Modes -->
+                    <div class="add-mode-switch">
+                        <button class="mode-btn active" id="modeVisionBtn" type="button">📸 عکس تکی (AI)</button>
+                        <button class="mode-btn" id="modeBulkUploadBtn" type="button">📂 آپلود گروهی عکس</button>
+                        <button class="mode-btn" id="modeBulkTextBtn" type="button">📋 ثبت متنی دسته‌جمعی</button>
+                        <button class="mode-btn" id="modeManualBtn" type="button">✍️ ثبت دستی تکی</button>
+                    </div>
+
+                    <!-- 1. AI Vision Single Photo Dropzone -->
+                    <div id="visionForm" class="form-section">
+                        <div class="dropzone" id="dropZone">
+                            <input type="file" id="clothingPhotoInput" accept="image/*" hidden>
+                            <div class="dropzone-content" id="dropZonePrompt">
+                                <div class="drop-icon">📷</div>
+                                <h4>عکس لباس خود را اینجا بکشید یا کلیک کنید</h4>
+                                <p>هوش مصنوعی بینایی جمینای نوع لباس، رنگ و فصل آن را در لحظه تشخیص می‌دهد.</p>
+                                <button type="button" class="btn-secondary" onclick="document.getElementById('clothingPhotoInput').click()">انتخاب تصویر</button>
+                            </div>
+                            <div class="dropzone-preview" id="dropZonePreview" style="display: none;">
+                                <img id="previewImg" src="" alt="پیش‌نمایش لباس">
+                                <div class="preview-actions">
+                                    <button type="button" id="confirmUploadBtn" class="btn-primary">
+                                        <span>ارسال و تحلیل با هوش مصنوعی</span>
+                                    </button>
+                                    <button type="button" id="cancelUploadBtn" class="btn-text">تغییر تصویر</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Interactive Detection Verification Box -->
+                        <div id="detectionResultBox" class="detection-box" style="display: none;">
+                            <div class="detection-header">
+                                <span class="detection-badge" id="detectionBadge">✨ نتیجه تحلیل تصویر</span>
+                                <span class="detection-note" id="detectionNote"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="detectedName">نام پیشنهادی لباس:</label>
+                                <input type="text" id="detectedName">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="detectedCategory">دسته‌بندی:</label>
+                                    <select id="detectedCategory">
+                                        <option value="کاپشن">کاپشن</option>
+                                        <option value="پالتو">پالتو و بارانی</option>
+                                        <option value="هودی">هودی و سویشرت</option>
+                                        <option value="پیراهن">پیراهن</option>
+                                        <option value="تیشرت">تیشرت</option>
+                                        <option value="شلوار">شلوار</option>
+                                        <option value="کفش">کفش و کتانی</option>
+                                        <option value="اکسسوری">اکسسوری</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="detectedColor">رنگ:</label>
+                                    <input type="text" id="detectedColor">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="detectedSeason">فصل مناسب:</label>
+                                <select id="detectedSeason">
+                                    <option value="پاییز و زمستان">پاییز و زمستان</option>
+                                    <option value="زمستان">زمستان</option>
+                                    <option value="پاییز">پاییز</option>
+                                    <option value="بهار و تابستان">بهار و تابستان</option>
+                                    <option value="چهارفصل">چهارفصل</option>
+                                </select>
+                            </div>
+                            <div class="detection-actions">
+                                <button type="button" id="saveDetectedBtn" class="btn-primary" style="flex: 1;">
+                                    <span>تایید و ذخیره در کمد</span>
+                                </button>
+                                <button type="button" id="discardDetectedBtn" class="btn-secondary">
+                                    <span>انصراف</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Bulk Photo Upload Section -->
+                    <div id="bulkUploadForm" class="form-section" style="display: none;">
+                        <div class="dropzone" id="bulkDropZone">
+                            <input type="file" id="bulkPhotoInput" accept="image/*" multiple hidden>
+                            <div class="dropzone-content" id="bulkDropPrompt">
+                                <div class="drop-icon">📂</div>
+                                <h4>انتخاب همزمان چندین عکس لباس یا کشیدن به اینجا</h4>
+                                <p>می‌توانید همزمان ۲ تا ۲۰ عکس لباس را انتخاب کنید تا پس‌زمینه همگی حذف و به طور خودکار به کمد اضافه شوند.</p>
+                                <button type="button" class="btn-secondary" onclick="document.getElementById('bulkPhotoInput').click()">انتخاب چند فایل تصویر</button>
+                            </div>
+                        </div>
+
+                        <!-- Selected Files Summary / Grid -->
+                        <div id="bulkFilesPreviewWrap" style="display: none; margin-top: 16px;">
+                            <div class="bulk-header-bar">
+                                <span class="bulk-count-badge">تعداد فایل‌های انتخابی: <strong id="bulkSelectedCount">۰</strong></span>
+                                <button type="button" id="bulkClearFilesBtn" class="btn-text-danger">حذف همه</button>
+                            </div>
+                            <div class="bulk-thumb-grid" id="bulkThumbGrid">
+                                <!-- Thumbnails will be rendered dynamically -->
+                            </div>
+                            
+                            <!-- Bulk Progress Bar -->
+                            <div id="bulkProgressWrap" class="bulk-progress-wrap" style="display: none;">
+                                <div class="progress-bar-bg">
+                                    <div class="progress-bar-fill" id="bulkProgressBar"></div>
+                                </div>
+                                <span class="progress-status-text" id="bulkProgressText">در حال پردازش عکس‌ها...</span>
+                            </div>
+
+                            <div class="preview-actions" style="margin-top: 14px;">
+                                <button type="button" id="bulkUploadSubmitBtn" class="btn-primary" style="flex: 1;">
+                                    <span>🚀 تحلیل هوشمند و ذخیره همه در کمد</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Bulk Text Multi-Item Entry Section -->
+                    <div id="bulkTextForm" class="form-section" style="display: none;">
+                        <div class="bulk-text-intro">
+                            <h4>📋 ثبت سریع چندتایی لباس‌ها با متن</h4>
+                            <p>هر لباس را در یک خط جداگانه بنویسید. سیستم به طور خودکار نوع، رنگ و فصل آن را شناسایی می‌کند.</p>
+                        </div>
+
+                        <!-- Quick Template Chips -->
+                        <div class="quick-template-chips">
+                            <span class="chips-title">قالب‌های پیشنهادی آماده:</span>
+                            <button type="button" class="chip-preset" onclick="insertBulkTemplate('winter')">❄️ پکیج زمستانه</button>
+                            <button type="button" class="chip-preset" onclick="insertBulkTemplate('casual')">☕ پکیج کژوال و روزمره</button>
+                            <button type="button" class="chip-preset" onclick="insertBulkTemplate('formal')">👔 پکیج رسمی و کاری</button>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bulkTextInput">لیست لباس‌ها (هر سطر یک لباس):</label>
+                            <textarea id="bulkTextInput" rows="6" placeholder="مثال:
+هودی طوسی پنبه‌ای، پاییز، طوسی
+شلوار کتان کرم، چهارفصل، کرم
+کاپشن بادی مشکی، زمستان، مشکی
+پالتو شتری، زمستان، قهوه‌ای
+کتانی سفید نایک، چهارفصل، سفید"></textarea>
+                            <small class="form-hint">فرمت: نام لباس [، فصل] [، رنگ] — مشخص کردن فصل و رنگ اختیاری است و خودکار تشخیص داده می‌شود.</small>
+                        </div>
+
+                        <div class="bulk-text-actions">
+                            <button type="button" id="bulkTextParseBtn" class="btn-secondary" style="flex: 1;">
+                                <span>🔍 پیش‌نمایش و تفکیک آیتم‌ها</span>
+                            </button>
+                            <button type="button" id="bulkTextSubmitDirectBtn" class="btn-primary" style="flex: 1;">
+                                <span>✨ ذخیره مستقیم در کمد</span>
+                            </button>
+                        </div>
+
+                        <!-- Interactive Table for Parsed Items Preview -->
+                        <div id="bulkParsedTableWrap" style="display: none; margin-top: 16px;">
+                            <div class="bulk-header-bar">
+                                <span class="bulk-count-badge">آیتم‌های آماده ثبت: <strong id="bulkParsedCount">۰</strong></span>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="bulk-preview-table" id="bulkParsedTable">
+                                    <thead>
+                                        <tr>
+                                            <th>تصویر</th>
+                                            <th>نام لباس</th>
+                                            <th>دسته‌بندی</th>
+                                            <th>رنگ</th>
+                                            <th>فصل</th>
+                                            <th>حذف</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bulkParsedTableBody">
+                                        <!-- Parsed rows injected here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button type="button" id="bulkSaveParsedBtn" class="btn-primary" style="width: 100%; margin-top: 12px;">
+                                <span>تایید نهایی و ثبت در کمد</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Manual Entry Form -->
+                    <form id="manualForm" class="form-section" style="display: none;">
+                        <div class="form-group">
+                            <label for="itemName">نام لباس:</label>
+                            <input type="text" id="itemName" placeholder="مثلاً: هودی مشکی ضخیم" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="itemCategory">دسته‌بندی لباس / اکسسوری:</label>
+                                <select id="itemCategory" required>
+                                    <optgroup label="بالاتنه و پوشش‌های گرم">
+                                        <option value="کاپشن">کاپشن و پافر</option>
+                                        <option value="پالتو">پالتو و اورکت</option>
+                                        <option value="بارانی">بارانی و ترنچ‌کت</option>
+                                        <option value="هودی">هودی و دورس</option>
+                                        <option value="پلیور">پلیور و بافت</option>
+                                        <option value="پیراهن">پیراهن</option>
+                                        <option value="تیشرت">تیشرت و پلوشرت</option>
+                                        <option value="کت تک">کت تک و بلیزر</option>
+                                        <option value="جلیقه">جلیقه و وست</option>
+                                    </optgroup>
+                                    <optgroup label="پایین‌تنه">
+                                        <option value="شلوار جین">شلوار جین</option>
+                                        <option value="شلوار کتان">شلوار کتان</option>
+                                        <option value="شلوار پارچه‌ای">شلوار رسمی و پارچه‌ای</option>
+                                        <option value="شلوار اسلش">شلوار اسلش و ورزشی</option>
+                                        <option value="دامن">دامن</option>
+                                        <option value="شورت">شورت و برمودا</option>
+                                    </optgroup>
+                                    <optgroup label="پوشش پا و کفش">
+                                        <option value="کتانی">کتانی و کفش ورزشی</option>
+                                        <option value="کفش چرم">کفش چرم و مجلسی</option>
+                                        <option value="بوت">بوت و نیم‌بوت</option>
+                                        <option value="کالج">کالج و لوفر</option>
+                                        <option value="صندل">صندل</option>
+                                    </optgroup>
+                                    <optgroup label="اکسسوری و ملزومات">
+                                        <option value="شال">شال و روسری</option>
+                                        <option value="کلاه بافتنی">کلاه بافتنی زمستانی</option>
+                                        <option value="کلاه نقاب‌دار">کلاه نقاب‌دار (کپ)</option>
+                                        <option value="دستکش">دستکش</option>
+                                        <option value="عینک آفتابی">عینک آفتابی</option>
+                                        <option value="ساعت">ساعت مچی</option>
+                                        <option value="کمربند">کمربند چرم</option>
+                                        <option value="کیف">کیف و کوله‌پشتی</option>
+                                        <option value="چتر">چتر</option>
+                                        <option value="اکسسوری">سایر اکسسوری‌ها</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="itemColor">رنگ:</label>
+                                <input type="text" id="itemColor" placeholder="مثلاً: مشکی، سفید، سرمه‌ای" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="itemSeason">فصل مناسب:</label>
+                            <select id="itemSeason" required>
+                                <option value="چهارفصل">چهارفصل</option>
+                                <option value="بهار">بهار</option>
+                                <option value="تابستان">تابستان</option>
+                                <option value="پاییز">پاییز</option>
+                                <option value="زمستان">زمستان</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn-primary">
+                            <span>افزودن به کمد</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Existing Wardrobe Grid -->
+                <div class="wardrobe-items-panel glass-card">
+                    <div class="panel-header">
+                        <h3>لباس‌های ثبت‌شده در کمد شما</h3>
+                        <div class="filter-chips" id="categoryFilters">
+                            <button class="filter-chip active" data-filter="all">همه</button>
+                            <button class="filter-chip" data-filter="کاپشن">کاپشن و پالتو</button>
+                            <button class="filter-chip" data-filter="هودی">هودی و بافت</button>
+                            <button class="filter-chip" data-filter="پیراهن">پیراهن و تیشرت</button>
+                            <button class="filter-chip" data-filter="شلوار">شلوار و دامن</button>
+                            <button class="filter-chip" data-filter="کفش">کفش و کتانی</button>
+                            <button class="filter-chip" data-filter="اکسسوری">اکسسوری و کلاه</button>
+                        </div>
+                    </div>
+
+                    <div class="wardrobe-grid" id="wardrobeGrid">
+                        <!-- Dynamic wardrobe cards -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 3: History & Favorites -->
+        <section id="historyTab" class="tab-content">
+            <div class="history-header glass-card">
+                <div>
+                    <h2>تاریخچه پیشنهادات و علاقه‌مندی‌ها</h2>
+                    <p>ست‌های محبوبی که ذخیره کرده‌اید را مرور کرده و به سرعت به آن‌ها دسترسی پیدا کنید.</p>
+                </div>
+                <div class="history-filter-toggle">
+                    <button class="filter-btn active" id="historyAllBtn">همه تاریخچه</button>
+                    <button class="filter-btn" id="historyFavBtn">⭐ فقط نشان‌شده‌ها</button>
+                </div>
+            </div>
+
+            <div class="history-list" id="historyList">
+                <!-- Dynamically populated -->
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>WearWise AI – طراحی شده برای تجربه هوشمند، سریع و زیبای انتخاب پوشاک متناسب با اقلیم و سبک زندگی شما.</p>
+        </footer>
+
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- User Profile Modal -->
+    <div id="profileModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card glass-card profile-modal-card">
+            <div class="modal-header profile-modal-header">
+                <h3>👤 پروفایل کاربر و مشخصات فردی</h3>
+                <button type="button" class="btn-del" id="closeProfileModal">✖</button>
+            </div>
+            <p class="modal-desc">
+                این مشخصات به موتور هوش مصنوعی کمک می‌کند پیشنهادات متناسب با جنسیت، رده سنی و فرم بدنی شما تولید کند.
+            </p>
+            
+            <div class="profile-modal-body">
+                <div class="profile-section-group">
+                    <label class="form-label">جنسیت استایل:</label>
+                    <div class="profile-options-grid">
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileGender" value="unisex" checked>
+                            <span>⚧ مشترک / خنثی</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileGender" value="male">
+                            <span>👨 آقایان (مردانه)</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileGender" value="female">
+                            <span>👩 بانوان (زنانه)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="profile-section-group">
+                    <label class="form-label">رده سنی:</label>
+                    <div class="profile-options-grid">
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileAge" value="teen">
+                            <span>🎒 نوجوان (۱۴ - ۱۹ سال)</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileAge" value="young_adult" checked>
+                            <span>⚡ جوان (۲۰ - ۳۵ سال)</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileAge" value="adult">
+                            <span>💼 میان‌سال (۳۶ - ۵۰ سال)</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileAge" value="senior">
+                            <span>🌿 بزرگسال (+۵۰ سال)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="profile-section-group">
+                    <label class="form-label">سایز و فرم پوشش (Fit):</label>
+                    <div class="profile-options-grid">
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileFit" value="slim">
+                            <span>📐 جذب و فیت (Slim)</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileFit" value="regular" checked>
+                            <span>⚖️ متعادل و معمولی (Regular)</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileFit" value="oversized">
+                            <span>👕 لش و آزاد (Oversized)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="profile-section-group">
+                    <label class="form-label">حساسیت به سرما و گرما:</label>
+                    <div class="profile-options-grid">
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileTemp" value="cold_sensitive">
+                            <span>❄️ زود سردم می‌شود (لایه‌بندی گرم‌تر)</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileTemp" value="normal" checked>
+                            <span>⚖️ معمولی و نرمال</span>
+                        </label>
+                        <label class="profile-pill-label">
+                            <input type="radio" name="profileTemp" value="warm_sensitive">
+                            <span>🔥 زود گرمم می‌شود (لباس‌های سبک‌تر)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions profile-modal-footer">
+                <button type="button" id="saveProfileBtn" class="btn-primary" style="flex: 1;">
+                    <span>ذخیره پروفایل</span>
+                </button>
+                <button type="button" id="cancelProfileBtn" class="btn-secondary">
+                    <span>انصراف</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mannequin Showcase Modal -->
+    <div id="mannequinModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card glass-card mannequin-modal-card">
+            <div class="modal-header mannequin-modal-header">
+                <div class="mannequin-modal-title-wrap">
+                    <span class="badge-mannequin-tag">👗 تن مانکن مزونی</span>
+                    <h3 id="mannequinModalTitle">ست پیشنهادی تن مانکن</h3>
+                </div>
+                <button type="button" class="btn-del" id="closeMannequinModal">✖</button>
+            </div>
+            
+            <div class="mannequin-modal-body">
+                <div class="mannequin-preview-wrapper">
+                    <img id="mannequinModalImg" class="mannequin-preview-img" src="" alt="لباس تن مانکن" />
+                    <div class="mannequin-img-actions">
+                        <button type="button" class="btn-mannequin-cycle" id="cycleMannequinAngleBtn" title="تغییر زاویه و عکس مانکن">
+                            🔄 زاویه / مدل بعدی مانکن
+                        </button>
+                        <span class="mannequin-photo-counter" id="mannequinPhotoCounter">مدل ۱ از ۳</span>
+                    </div>
+                </div>
+
+                <div class="mannequin-details-wrap">
+                    <div class="mannequin-meta-row">
+                        <span class="mannequin-time-badge" id="mannequinModalTime">🕒 مناسب روز</span>
+                        <span class="mannequin-gender-badge" id="mannequinModalGender">👤 یونیسکس</span>
+                    </div>
+
+                    <h4 class="mannequin-subhead">👔 اجزای این ست روی مانکن:</h4>
+                    <div class="mannequin-pieces-list" id="mannequinModalPieces"></div>
+
+                    <div class="mannequin-why-box" id="mannequinModalWhy"></div>
+                </div>
+            </div>
+
+            <div class="modal-actions mannequin-modal-footer">
+                <button type="button" class="btn-primary" id="cycleMannequinBtnBottom" style="flex: 1;">
+                    <span>🔄 تغییر عکس / زاویه دیگر مانکن</span>
+                </button>
+                <button type="button" class="btn-secondary" id="closeMannequinBtn">
+                    <span>بستن پنجره</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Settings Modal -->
+    <div id="apiKeyModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <h3>🔑 تنظیم کلید هوش مصنوعی Google Gemini</h3>
+                <button type="button" class="btn-del" id="closeApiKeyModal">✖</button>
+            </div>
+            <p class="modal-desc">
+                برای فعال‌سازی بینایی پیشرفته جمینای و تحلیل دقیق تصاویر لباس و پیشنهادات، کلید API خود را از
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: #818cf8; text-decoration: underline;">Google AI Studio</a>
+                دریافت کرده و در زیر وارد کنید.
+            </p>
+            <div class="form-group">
+                <label for="apiKeyInput">کلید Gemini API:</label>
+                <input type="password" id="apiKeyInput" placeholder="AIzaSy...">
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="saveApiKeyBtn" class="btn-primary" style="flex: 1;">
+                    <span>ذخیره و فعال‌سازی</span>
+                </button>
+                <button type="button" id="cancelApiKeyBtn" class="btn-secondary">
+                    <span>انصراف</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cloud & Cross-Device Sync Modal -->
+    <div id="syncModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card glass-card sync-modal-card">
+            <div class="modal-header">
+                <div class="sync-modal-title">
+                    <span class="sync-title-icon">☁️</span>
+                    <h3>همگام‌سازی ابری و انتقال به تمام دستگاه‌ها</h3>
+                </div>
+                <button type="button" class="btn-del" id="closeSyncModal">✖</button>
+            </div>
+            
+            <p class="modal-desc">
+                با این قابلیت، کمد لباس‌ها، تصاویر، پروفایل و تنظیمات شما بین <strong>کامپیوتر، موبایل و تبلت</strong> با یک کلیک یکسان و همگام می‌شوند.
+            </p>
+
+            <div class="sync-modal-body">
+                <!-- Section 1: Cloud Sync ID -->
+                <div class="sync-box">
+                    <div class="sync-box-header">
+                        <span class="box-icon">🔑</span>
+                        <h4>شناسه اختصاصی کمد شما (Sync Key)</h4>
+                    </div>
+                    <p class="sync-box-desc">
+                        این شناسه را در هر دستگاهی (گوشی، لپ‌تاپ دیگر و...) وارد کنید تا به تمام لباس‌های خود دسترسی داشته باشید:
+                    </p>
+                    <div class="sync-input-row">
+                        <input type="text" id="syncKeyInput" placeholder="مثلاً lordx-444 یا نام دلخواه شما" spellcheck="false" autocomplete="off" />
+                        <button type="button" id="generateSyncKeyBtn" class="btn-secondary" title="تولید شناسه تصادفی و اختصاصی">
+                            🎲 تصادفی
+                        </button>
+                        <button type="button" id="copySyncLinkBtn" class="btn-secondary" title="کپی لینک مستقیم برای باز کردن در گوشی">
+                            📋 کپی لینک گوشی
+                        </button>
+                    </div>
+
+                    <div class="sync-actions-row">
+                        <button type="button" id="pushSyncBtn" class="btn-primary">
+                            <span>☁️ ارسال به فضای ابری (Push)</span>
+                        </button>
+                        <button type="button" id="pullSyncBtn" class="btn-secondary">
+                            <span>📥 دریافت از فضای ابری (Pull)</span>
+                        </button>
+                    </div>
+
+                    <div class="sync-options-row">
+                        <label class="sync-toggle-label">
+                            <input type="checkbox" id="autoSyncCheckbox" checked />
+                            <span>همگام‌سازی خودکار در هر تغییر (Auto-Sync)</span>
+                        </label>
+                        <span class="sync-status-indicator" id="syncStatusBadge">وضعیت: آماده</span>
+                    </div>
+                </div>
+
+                <!-- Section 2: QR Code Instant Phone Transfer -->
+                <div class="sync-box">
+                    <div class="sync-box-header">
+                        <span class="box-icon">📱</span>
+                        <h4>انتقال فوری به موبایل با بارکد (QR Code)</h4>
+                    </div>
+                    <p class="sync-box-desc">
+                        برای باز کردن کمد روی گوشی، کافیست با دوربین موبایل، بارکد زیر را اسکن کنید تا سایت باز شده و لباس‌ها بدون تایپ کردن لود شوند:
+                    </p>
+                    <div class="sync-qr-wrapper">
+                        <button type="button" id="generateQrBtn" class="btn-secondary" style="margin-bottom: 10px;">
+                            <span>🔄 به‌روزرسانی بارکد بر اساس شناسه فعلی</span>
+                        </button>
+                        <div id="syncQrContainer" class="sync-qr-container">
+                            <img id="syncQrImg" src="" alt="بارکد ورود سریع با گوشی" style="display: none;" />
+                            <div id="syncQrPlaceholder" class="sync-qr-placeholder">
+                                <span>روی دکمه بالا کلیک کنید تا بارکد تولید شود.</span>
+                            </div>
+                        </div>
+                        <p class="sync-qr-hint" id="syncQrHint"></p>
+                    </div>
+                </div>
+
+                <!-- Section 3: Offline Backup (JSON) -->
+                <div class="sync-box">
+                    <div class="sync-box-header">
+                        <span class="box-icon">💾</span>
+                        <h4>پشتیبان‌گیری آفلاین (فایل کمد)</h4>
+                    </div>
+                    <p class="sync-box-desc">
+                        می‌توانید کمد و تنظیمات خود را به صورت فایل ذخیره کرده و در هر دیوایسی بارگذاری کنید (۱۰۰٪ آفلاین و بدون نیاز به اینترنت):
+                    </p>
+                    <div class="sync-actions-row">
+                        <button type="button" id="exportBackupBtn" class="btn-secondary">
+                            <span>💾 دانلود فایل پشتیبان (JSON)</span>
+                        </button>
+                        <button type="button" id="importBackupBtn" class="btn-secondary">
+                            <span>📂 بازیابی از فایل پشتیبان</span>
+                        </button>
+                        <input type="file" id="importBackupFile" accept=".json" style="display: none;" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 15px;">
+                <button type="button" id="closeSyncModalBtn" class="btn-secondary" style="width: 100%;">
+                    <span>بستن پنجره</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal / Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-card glass-card">
+            <div class="spinner-gemini"></div>
+            <h4 id="loadingTitle">در حال ارتباط با هوش مصنوعی Gemini...</h4>
+            <p id="loadingMsg">تحلیل پارامترهای بارندگی، دما و انتخاب بهترین استایل‌ها</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="app.js?v=3.3"></script>
+</body>
+</html>
