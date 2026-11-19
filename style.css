@@ -2665,3 +2665,22 @@ input:checked + .slider:before {
     color: var(--accent-emerald);
     margin-top: 6px;
 }
+
+/* Quick Category Buttons in Detection Box */
+.btn-chip {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 5px 12px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.btn-chip:hover {
+    background: rgba(99, 102, 241, 0.25);
+    border-color: var(--primary);
+    color: #fff;
+    transform: translateY(-1px);
+}
