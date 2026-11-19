@@ -794,48 +794,133 @@ function generateClientSideRecommendations() {
     const gender = state.profile?.gender || 'unisex';
     const dest = state.destination || 'محل کار / اداری';
 
-    const wardrobeNames = state.useWardrobe ? state.wardrobe.map(w => w.name) : [];
     const isCold = temp < 14;
     const isMild = temp >= 14 && temp < 22;
 
-    const jacketPiece = gender === 'female' ? "کاپشن یا بارانی زنانه شیک" : "کاپشن بادی مشکی";
-    const coatPiece = gender === 'female' ? "پالتو فوتر یا ترنچ‌کت" : "پالتو کلاسیک پشمی";
-    const midPiece = isCold ? "هودی دورس گرم" : (isMild ? "پلیور بافت سبک" : "پیراهن آستین بلند");
+    const wardrobe = (state.useWardrobe && Array.isArray(state.wardrobe)) ? state.wardrobe : [];
+    const wardrobeNames = wardrobe.map(w => w.name);
 
-    const w1 = wardrobeNames.find(n => n.includes('کاپشن') || n.includes('پالتو')) || jacketPiece;
-    const w2 = wardrobeNames.find(n => n.includes('شلوار')) || "شلوار کتان راسته";
-    const w3 = wardrobeNames.find(n => n.includes('کتانی') || n.includes('کفش')) || "کتانی راحت";
+    // Group wardrobe by category
+    const tops = wardrobe.filter(w => {
+        const cat = w.category || '';
+        const n = w.name || '';
+        return cat === 'تیشرت' || cat === 'پیراهن' || cat === 'هودی' || cat === 'پلیور' ||
+               n.includes('تیشرت') || n.includes('پیراهن') || n.includes('پلیور') || n.includes('هودی') || n.includes('دورس') || n.includes('تاپ') || n.includes('بلوز');
+    });
+
+    const bottoms = wardrobe.filter(w => {
+        const cat = w.category || '';
+        const n = w.name || '';
+        return cat === 'شلوار' || n.includes('شلوار') || n.includes('جین') || n.includes('کتان') || n.includes('اسلش') || n.includes('دامن');
+    });
+
+    const outer = wardrobe.filter(w => {
+        const cat = w.category || '';
+        const n = w.name || '';
+        return cat === 'کاپشن' || cat === 'پالتو' || n.includes('کاپشن') || n.includes('پالتو') || n.includes('بارانی') || n.includes('پافر') || n.includes('کت') || n.includes('بادگیر');
+    });
+
+    const shoes = wardrobe.filter(w => {
+        const cat = w.category || '';
+        const n = w.name || '';
+        return cat === 'کفش' || n.includes('کفش') || n.includes('کتانی') || n.includes('بوت') || n.includes('نیم‌بوت') || n.includes('صندل');
+    });
+
+    const accessories = wardrobe.filter(w => {
+        const cat = w.category || '';
+        const n = w.name || '';
+        return cat === 'اکسسوری' || n.includes('ساعت') || n.includes('عینک') || n.includes('کلاه') || n.includes('شال') || n.includes('کیف') || n.includes('کمربند');
+    });
+
+    // Helper to safely pick an item without going out of bounds
+    const pick = (arr, index) => arr.length > 0 ? arr[index % arr.length].name : null;
+
+    // Helper to build a clean outfit
+    const buildOutfit = (title, timeOfDay, topIdx, bottomIdx, outerIdx, shoeIdx, accIdx, whyText) => {
+        const selectedFromWardrobe = [];
+        const externalSuggestions = [];
+
+        // 1. Top from wardrobe
+        const topItem = pick(tops, topIdx);
+        if (topItem) {
+            selectedFromWardrobe.push(topItem);
+        } else {
+            externalSuggestions.push(isCold ? "هودی دورس گرم" : (isMild ? "پیراهن آستین بلند" : "تیشرت نخی خنک"));
+        }
+
+        // 2. Bottom from wardrobe
+        const bottomItem = pick(bottoms, bottomIdx);
+        if (bottomItem) {
+            selectedFromWardrobe.push(bottomItem);
+        } else {
+            externalSuggestions.push(dest.includes('رسمی') || dest.includes('اداری') ? "شلوار کتان راسته" : "شلوار جین کلاسیک");
+        }
+
+        // 3. Outerwear (if cold, rainy or available in wardrobe)
+        if (isCold || isRain || outer.length > 0) {
+            const outerItem = pick(outer, outerIdx);
+            if (outerItem) {
+                selectedFromWardrobe.push(outerItem);
+            } else if (isCold || isRain) {
+                externalSuggestions.push(isRain ? "بارانی یا کاپشن ضدآب" : "کاپشن گرم زمستانه");
+            }
+        }
+
+        // 4. Shoes from wardrobe
+        const shoeItem = pick(shoes, shoeIdx);
+        if (shoeItem) {
+            selectedFromWardrobe.push(shoeItem);
+        } else {
+            externalSuggestions.push(isCold ? "نیم‌بوت راحت" : "کتانی ورزشی سفید");
+        }
+
+        // 5. Accessories from wardrobe
+        const accItem = pick(accessories, accIdx);
+        if (accItem) {
+            selectedFromWardrobe.push(accItem);
+        }
+
+        // If wardrobe has other items that were not yet included, add one to maximize wardrobe usage
+        if (selectedFromWardrobe.length < 3 && wardrobe.length > selectedFromWardrobe.length) {
+            const unused = wardrobe.find(w => !selectedFromWardrobe.includes(w.name));
+            if (unused) selectedFromWardrobe.push(unused.name);
+        }
+
+        const allItems = [...selectedFromWardrobe, ...externalSuggestions];
+        return {
+            name: title,
+            time_of_day: timeOfDay,
+            items: allItems,
+            from_wardrobe: selectedFromWardrobe,
+            general_suggestions: externalSuggestions,
+            why: whyText
+        };
+    };
 
     const outfits = [
-        {
-            name: `ست ۱: استایل ویژه ${dest}`,
-            time_of_day: "صبح تا ظهر",
-            items: [w1, w2, w3],
-            from_wardrobe: [w1, w2, w3].filter(item => wardrobeNames.includes(item)),
-            general_suggestions: [w1, w2, w3].filter(item => !wardrobeNames.includes(item)),
-            why: `انتخابی برازنده و آراسته برای حضور در ${dest} با هماهنگی کامل با دمای ${temp} درجه سانتی‌گراد.`
-        },
-        {
-            name: `ست ۲: لایه‌بندی منعطف ${isCold ? 'گرم زمستانه' : 'خنک پاییزی'}`,
-            time_of_day: "ظهر تا عصر",
-            items: [coatPiece, midPiece, "شلوار جین تیره", "نیم‌بوت چرمی"],
-            from_wardrobe: [coatPiece, midPiece, "شلوار جین تیره", "نیم‌بوت چرمی"].filter(item => wardrobeNames.includes(item)),
-            general_suggestions: [coatPiece, midPiece, "شلوار جین تیره", "نیم‌بوت چرمی"].filter(item => !wardrobeNames.includes(item)),
-            why: "لایه‌بندی هوشمند متناسب با نوسانات دمایی روزانه و ایجاد حداکثر راحتی و زیبایی بصری."
-        },
-        {
-            name: `ست ۳: ترکیب آزاد و مدرن شهری`,
-            time_of_day: "عصر و شب",
-            items: ["هودی کلاه‌دار", "شلوار اسلش شیک", "کفش اسپرت", "اکسسوری هماهنگ"],
-            from_wardrobe: ["هودی کلاه‌دار", "شلوار اسلش شیک", "کفش اسپرت", "اکسسوری هماهنگ"].filter(item => wardrobeNames.includes(item)),
-            general_suggestions: ["هودی کلاه‌دار", "شلوار اسلش شیک", "کفش اسپرت", "اکسسوری هماهنگ"].filter(item => !wardrobeNames.includes(item)),
-            why: "استایلی با آزادی حرکت بالا و نشاط بیشتر برای استراحت یا فعالیت‌های غیررسمی عصرگاهی."
-        }
+        buildOutfit(
+            `ست ۱: ترکیب آراسته برای ${dest}`,
+            "صبح تا ظهر",
+            0, 0, 0, 0, 0,
+            `ترکیب هوشمندانه متناسب با مقصد (${dest}) و هماهنگ با دمای ${temp} درجه سانتی‌گراد، با استفاده حداکثری از لباس‌های موجود در کمد شما.`
+        ),
+        buildOutfit(
+            `ست ۲: لایه‌بندی منعطف ${isCold ? 'گرم' : 'کژوال'}`,
+            "ظهر تا عصر",
+            1, 1, 1, 1, 1,
+            `استایلی شیک و متناوب برای تغییرات احتمالی دما در طول روز با استفاده از تنوع لباس‌های کمد شخصی شما.`
+        ),
+        buildOutfit(
+            `ست ۳: استایل آزاد و راحت شهری`,
+            "عصر و شب",
+            2, 2, 2, 2, 2,
+            `ترکیبی جذاب و پرانرژی برای ساعات استراحت، دورهمی یا فعالیت‌های عصرگاهی برگرفته از قطعات کمد شما.`
+        )
     ];
 
     return {
         summary: `هوای امروز ${state.city} ${curr.description} با دمای حدود ${temp}°C است.`,
-        reason: `طراحی شده ویژه مقصد (${dest}) و استایل ${state.style}. بر اساس دمای ${temp}°C، رطوبت ${curr.humidity}% و سرعت باد ${curr.wind_speed} km/h.`,
+        reason: `طراحی شده ویژه مقصد (${dest}) و استایل ${state.style}. این ست‌ها با اولویت قطعی لباس‌های موجود در کمد شخصی شما چیده شده‌اند.`,
         umbrella: isRain,
         outfits: outfits,
         history_id: Date.now()
@@ -1035,6 +1120,100 @@ async function deleteWardrobeItem(id) {
 // -------------------------------------------------------------
 // AI Outfit Recommendations
 // -------------------------------------------------------------
+async function callGeminiRecommendationClientSide(apiKey) {
+    const models = [
+        'gemini-3.1-flash-lite',
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
+        'gemini-3.8-flash'
+    ];
+
+    const weather = state.weather;
+    const curr = weather?.current || {};
+    const temp = curr.temperature || 18;
+    const dest = state.destination || 'محل کار / اداری';
+    const wardrobe = (state.useWardrobe && Array.isArray(state.wardrobe)) ? state.wardrobe : [];
+    
+    let wardrobeText = "کمد کاربر خالی است یا حالت کمد غیرفعال است.";
+    if (wardrobe.length > 0) {
+        wardrobeText = wardrobe.map((w, i) => `${i + 1}. "${w.name}" (دسته: ${w.category || 'سایر'}، رنگ: ${w.color || '-'}، فصل: ${w.season || 'چهارفصل'})`).join('\n');
+    }
+
+    const prompt = `شما مشاور ارشد استایل و هوش مصنوعی WearWise هستید.
+وظیفه شما چیدن ۳ ست لباس فوق‌العاده شیک، کاربردی و هماهنگ با آب‌وهوا برای کاربر است.
+
+اطلاعات شرایط:
+- شهر: ${state.city}
+- وضعیت آب‌وهوا: ${curr.description || 'صاف'}، دمای فعلی: ${temp}°C
+- مقصد / موقعیت: ${dest}
+- سبک استایل درخواستی: ${state.style}
+- جنسیت: ${state.profile?.gender || 'unisex'}
+
+لیست کامل لباس‌های موجود در کمد شخصی کاربر:
+${wardrobeText}
+
+قوانین بسیار مهم و تخطی‌ناپذیر:
+۱. کاربر تاکید اکید دارد که ست‌های پیشنهادی حتماً و در درجه اول از میان «لباس‌های موجود در کمد شخصی» او چیده شوند!
+۲. لیست from_wardrobe در هر ست باید دقیقاً شامل همان نام‌هایی باشد که در لیست کمد کاربر در بالا آمده است.
+۳. در بخش general_suggestions فقط و فقط در صورتی ۱ یا ۲ قلم بنویسید که در کمد کاربر آیتم ضروری آن بخش (مثلاً اگر در کمد هیچ کفشی نبود) وجود نداشته باشد. اگر لباس مناسب در کمد هست، به هیچ وجه لباس خارج از کمد پیشنهاد ندهید.
+۴. در هر ست، لیست items باید شامل تمام آیتم‌های آن ست (ترکیب from_wardrobe و پیشنهادات تکمیلی) باشد.
+۵. ۳ ست متنوع با حال‌وهوای مختلف متناسب با ${dest} و دمای ${temp} درجه طراحی کنید.
+
+خروجی منحصراً در قالب JSON زیر به زبان فارسی برگردانده شود (بدون هیچ مارک‌داون یا توضیح اضافی):
+{
+  "summary": "توصیف مختصر آب‌وهوا و توصیه کلی پوشش به زبان فارسی",
+  "reason": "دلیل و منطق هماهنگی ست‌ها با دمای ${temp} درجه و موقعیت ${dest}",
+  "umbrella": ${weather?.day_summary?.rain_alert ? 'true' : 'false'},
+  "outfits": [
+    {
+      "name": "نام جذاب و شیک ست",
+      "time_of_day": "صبح تا ظهر",
+      "items": ["نام تمام آیتم‌های ست"],
+      "from_wardrobe": ["نام دقیق لباس‌هایی که از کمد کاربر انتخاب شده‌اند"],
+      "general_suggestions": ["اقلام تکمیلی ضروری که در کمد نبود (در صورت نیاز)"],
+      "why": "توضیح کوتاه چرایی هماهنگی و زیبایی این ست"
+    }
+  ]
+}`;
+
+    const bodyData = JSON.stringify({
+        contents: [{
+            parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+            temperature: 0.2
+        }
+    });
+
+    for (const model of models) {
+        const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const candidateUrls = [directUrl, `https://corsproxy.io/?${encodeURIComponent(directUrl)}`];
+
+        for (const url of candidateUrls) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: bodyData
+                });
+                if (res.ok) {
+                    const json = await res.json();
+                    const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                    const parsed = JSON.parse(cleaned);
+                    if (parsed && parsed.outfits && parsed.outfits.length > 0) {
+                        parsed.history_id = Date.now();
+                        return parsed;
+                    }
+                }
+            } catch (err) {
+                console.warn(`Gemini recommendation call failed on ${url}:`, err);
+            }
+        }
+    }
+    throw new Error('Gemini recommendation call returned no valid result');
+}
+
 async function generateRecommendations(isAlternative = false) {
     if (!state.weather) {
         showToast('ابتدا وضعیت آب‌وهوا را دریافت کنید.', 'error');
@@ -1044,7 +1223,7 @@ async function generateRecommendations(isAlternative = false) {
     const t = I18N[state.lang] || I18N.fa;
     showLoading(
         isAlternative ? 'در حال تولید ست‌های تازه و جدید...' : 'در حال فراخوانی هوش مصنوعی...',
-        'تحلیل همزمان آب‌وهوا، مقصد، پروفایل و تنوع‌بخشی به لایه‌ها'
+        'ترکیب هوشمندانه لباس‌های کمد شما با شرایط آب‌وهوا و مقصد'
     );
 
     try {
@@ -1081,13 +1260,31 @@ async function generateRecommendations(isAlternative = false) {
         console.warn('Backend recommendation error, switching to client-side recommender:', err);
     }
 
-    // Client-Side Recommender (Autonomous on GitHub Pages)
+    // 1. Try Gemini Client-Side if API key is present
+    const apiKey = localStorage.getItem('wearwise_gemini_key');
+    if (apiKey && apiKey.trim().length > 10) {
+        try {
+            const aiRec = await callGeminiRecommendationClientSide(apiKey.trim());
+            if (aiRec && aiRec.outfits && aiRec.outfits.length > 0) {
+                state.currentRecommendations = aiRec;
+                renderRecommendations(aiRec);
+                saveLocalHistory(aiRec);
+                showToast(isAlternative ? 'ست‌های پیشنهادی تازه با هوش مصنوعی ایجاد شدند!' : 'پیشنهادات ست لباس بر اساس کمد شخصی شما آماده شد!', 'success');
+                hideLoading();
+                return;
+            }
+        } catch (aiErr) {
+            console.warn('Client-side Gemini recommendation note, using wardrobe algorithm:', aiErr);
+        }
+    }
+
+    // 2. Client-Side Recommender (Priority: 100% User Wardrobe)
     try {
         const clientRec = generateClientSideRecommendations();
         state.currentRecommendations = clientRec;
         renderRecommendations(clientRec);
         saveLocalHistory(clientRec);
-        showToast(isAlternative ? 'ست‌های پیشنهادی تازه با موفقیت ایجاد شدند!' : 'پیشنهادات ست لباس آماده شد!', 'success');
+        showToast(isAlternative ? 'ست‌های پیشنهادی تازه با موفقیت ایجاد شدند!' : 'پیشنهادات ست لباس بر اساس کمد شخصی شما آماده شد!', 'success');
     } catch (e) {
         console.error('Client recommendation error:', e);
         showToast('خطا در تولید پیشنهادات ست لباس.', 'error');
@@ -1181,8 +1378,13 @@ function renderMannequinModal(outfit, index) {
     if (DOM.mannequinModalGender) DOM.mannequinModalGender.textContent = genderLabel;
 
     const pieces = outfit.pieces || (outfit.items || []).map(itemName => {
-        const isWardrobe = (outfit.from_wardrobe || []).includes(itemName);
-        const matchedW = state.wardrobe.find(w => w.name === itemName || itemName.includes(w.name));
+        const matchedW = state.wardrobe.find(w => {
+            if (!w || !w.name) return false;
+            const wn = w.name.trim().toLowerCase();
+            const iname = itemName.trim().toLowerCase();
+            return wn === iname || iname.includes(wn) || wn.includes(iname);
+        });
+        const isWardrobe = (outfit.from_wardrobe || []).includes(itemName) || Boolean(matchedW);
         return {
             name: itemName,
             is_wardrobe: isWardrobe,
@@ -1288,8 +1490,13 @@ function renderRecommendations(data) {
 
         // Build Pieces Breakdown with photos
         const pieces = outfit.pieces || (outfit.items || []).map(itemName => {
-            const isWardrobe = (outfit.from_wardrobe || []).includes(itemName);
-            const matchedW = state.wardrobe.find(w => w.name === itemName || itemName.includes(w.name));
+            const matchedW = state.wardrobe.find(w => {
+                if (!w || !w.name) return false;
+                const wn = w.name.trim().toLowerCase();
+                const iname = itemName.trim().toLowerCase();
+                return wn === iname || iname.includes(wn) || wn.includes(iname);
+            });
+            const isWardrobe = (outfit.from_wardrobe || []).includes(itemName) || Boolean(matchedW);
             return {
                 name: itemName,
                 is_wardrobe: isWardrobe,
