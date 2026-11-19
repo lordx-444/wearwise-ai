@@ -2160,6 +2160,190 @@ function setupSyncModal() {
 // -------------------------------------------------------------
 // Image Vision & Photo Upload Handling
 // -------------------------------------------------------------
+async function callGeminiVisionClientSide(apiKey, base64Data, mimeType) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const prompt = `این تصویر یک لباس یا اکسسوری است. لطفاً نوع دقیق، رنگ، فصل و نام آن را با فرمت JSON دقیق زیر به فارسی بازگردان (فقط JSON بدون علامت مارک‌داون یا توضیح دیگر):
+{"name": "نام دقیق و زیبای لباس", "category": "یک از: کاپشن, هودی, پلیور, شلوار, کفش, پیراهن, اکسسوری", "color": "رنگ اصلی لباس", "season": "یک از: پاییز و زمستان, بهار و تابستان, چهارفصل"}`;
+
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{
+                parts: [
+                    { text: prompt },
+                    {
+                        inline_data: {
+                            mime_type: mimeType || 'image/jpeg',
+                            data: base64Data
+                        }
+                    }
+                ]
+            }]
+        })
+    });
+    if (!res.ok) throw new Error('Gemini API request failed');
+    const json = await res.json();
+    const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
+}
+
+async function processImageLocally(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const rawDataUrl = e.target.result;
+            const img = new Image();
+            img.onload = async () => {
+                const maxDim = 480;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+
+                const apiKey = localStorage.getItem('wearwise_gemini_key');
+                if (apiKey && apiKey.length > 10) {
+                    try {
+                        const base64Data = compressedDataUrl.split(',')[1];
+                        const geminiRes = await callGeminiVisionClientSide(apiKey, base64Data, 'image/jpeg');
+                        if (geminiRes && geminiRes.name) {
+                            return resolve({
+                                dataUrl: compressedDataUrl,
+                                name: geminiRes.name,
+                                category: geminiRes.category || 'کاپشن',
+                                color: geminiRes.color || 'مشکی',
+                                season: geminiRes.season || 'پاییز و زمستان',
+                                gemini_used: true
+                            });
+                        }
+                    } catch (gErr) {
+                        console.warn('Client-side Gemini Vision call failed, using heuristic:', gErr);
+                    }
+                }
+
+                const imgData = ctx.getImageData(
+                    Math.floor(w * 0.25),
+                    Math.floor(h * 0.25),
+                    Math.floor(w * 0.5),
+                    Math.floor(h * 0.5)
+                );
+                const pixels = imgData.data;
+                let totalR = 0, totalG = 0, totalB = 0, count = 0;
+                for (let i = 0; i < pixels.length; i += 16) {
+                    totalR += pixels[i];
+                    totalG += pixels[i + 1];
+                    totalB += pixels[i + 2];
+                    count++;
+                }
+                const avgR = count ? Math.round(totalR / count) : 100;
+                const avgG = count ? Math.round(totalG / count) : 100;
+                const avgB = count ? Math.round(totalB / count) : 100;
+                const brightness = (avgR * 299 + avgG * 587 + avgB * 114) / 1000;
+                const maxC = Math.max(avgR, avgG, avgB);
+                const minC = Math.min(avgR, avgG, avgB);
+                const saturation = maxC === 0 ? 0 : ((maxC - minC) / maxC) * 100;
+
+                let color = "مشکی";
+                if (brightness < 55) {
+                    color = "مشکی";
+                } else if (brightness > 200 && saturation < 25) {
+                    color = "سفید";
+                } else if (saturation < 22) {
+                    color = "طوسی";
+                } else if (avgB > avgR + 15 && avgB > avgG) {
+                    color = brightness < 100 ? "سرمه‌ای" : "آبی";
+                } else if (avgR > avgB + 20 && avgG > avgB + 10 && brightness > 130) {
+                    color = "کرم / بژ";
+                } else if (avgR > avgG + 25 && avgR > avgB + 25) {
+                    color = brightness < 110 ? "زرشکی" : "قرمز";
+                } else if (avgG > avgR + 15 && avgG > avgB + 15) {
+                    color = "سبز / زیتونی";
+                } else if (avgR > avgB + 30 && avgG > avgB) {
+                    color = "قهوه‌ای";
+                } else {
+                    color = "طوسی تیره";
+                }
+
+                const fn = (file.name || '').toLowerCase();
+                const ratio = img.height / (img.width || 1);
+                let category = "کاپشن";
+                let name = "";
+                let season = "پاییز و زمستان";
+
+                if (fn.includes('pant') || fn.includes('jean') || fn.includes('شلوار') || fn.includes('اسلش')) {
+                    category = "شلوار";
+                    name = `شلوار ${color}`;
+                    season = "چهارفصل";
+                } else if (fn.includes('shoe') || fn.includes('sneak') || fn.includes('boot') || fn.includes('کفش') || fn.includes('کتانی') || fn.includes('بوت')) {
+                    category = "کفش";
+                    name = `کتانی یا کفش ${color}`;
+                    season = "چهارفصل";
+                } else if (fn.includes('hoodie') || fn.includes('هودی')) {
+                    category = "هودی";
+                    name = `هودی ${color}`;
+                    season = "پاییز و زمستان";
+                } else if (fn.includes('sweater') || fn.includes('knit') || fn.includes('بافت') || fn.includes('پلیور')) {
+                    category = "پلیور";
+                    name = `پلیور بافت ${color}`;
+                    season = "پاییز و زمستان";
+                } else if (fn.includes('shirt') || fn.includes('پیراهن') || fn.includes('تیشرت')) {
+                    category = "پیراهن";
+                    name = `پیراهن ${color}`;
+                    season = "بهار و تابستان";
+                } else if (fn.includes('jacket') || fn.includes('coat') || fn.includes('کاپشن') || fn.includes('پالتو')) {
+                    category = "کاپشن";
+                    name = `کاپشن یا بارانی ${color}`;
+                    season = "پاییز و زمستان";
+                } else {
+                    if (ratio > 1.35) {
+                        category = "شلوار";
+                        name = `شلوار ${color}`;
+                        season = "چهارفصل";
+                    } else if (ratio < 0.75) {
+                        category = "کفش";
+                        name = `کفش یا کتانی ${color}`;
+                        season = "چهارفصل";
+                    } else if (ratio > 1.1) {
+                        category = "کاپشن";
+                        name = `کاپشن ${color}`;
+                        season = "پاییز و زمستان";
+                    } else {
+                        category = "هودی";
+                        name = `هودی یا پلیور ${color}`;
+                        season = "پاییز و زمستان";
+                    }
+                }
+
+                resolve({
+                    dataUrl: compressedDataUrl,
+                    name,
+                    category,
+                    color,
+                    season,
+                    gemini_used: false
+                });
+            };
+            img.src = rawDataUrl;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
 function setupPhotoUpload() {
     const { dropZone, clothingPhotoInput, dropZonePrompt, dropZonePreview, previewImg, confirmUploadBtn, cancelUploadBtn } = DOM;
 
@@ -2209,21 +2393,44 @@ function setupPhotoUpload() {
         showLoading('تحلیل هوشمند تصویر لباس...', 'تشخیص فرم و نوع پوشاک، حذف پس‌زمینه و استخراج پالت رنگ');
 
         try {
-            const formData = new FormData();
-            formData.append('file', state.selectedPhotoFile);
-            formData.append('auto_save', 'false');
+            let result = null;
+            if (!isStaticHost()) {
+                try {
+                    const formData = new FormData();
+                    formData.append('file', state.selectedPhotoFile);
+                    formData.append('auto_save', 'false');
 
-            const res = await fetch('/api/wardrobe/upload-photo', {
-                method: 'POST',
-                body: formData
-            });
+                    const res = await fetch('/api/wardrobe/upload-photo', {
+                        method: 'POST',
+                        body: formData
+                    });
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(extractApiErrorMessage(errData, 'خطا در تحلیل عکس لباس'));
+                    if (res.ok) {
+                        result = await res.json();
+                    }
+                } catch (e) {
+                    console.warn('Backend photo upload unavailable, using client-side engine:', e);
+                }
             }
 
-            const result = await res.json();
+            // Client-side local analyzer fallback (100% works on GitHub Pages & offline)
+            if (!result || !result.items || result.items.length === 0) {
+                const analyzed = await processImageLocally(state.selectedPhotoFile);
+                result = {
+                    items: [{
+                        name: analyzed.name,
+                        category: analyzed.category,
+                        color: analyzed.color,
+                        season: analyzed.season,
+                        image_url: analyzed.dataUrl
+                    }],
+                    gemini_used: analyzed.gemini_used,
+                    message: analyzed.gemini_used 
+                        ? 'لباس توسط هوش مصنوعی بینایی Gemini با موفقیت تحلیل گردید!' 
+                        : 'تصویر با موفقیت در مرورگر پردازش شد و آماده ذخیره است.'
+                };
+            }
+
             const items = result.items || [];
             if (items.length > 0) {
                 const item = items[0];
@@ -2235,11 +2442,11 @@ function setupPhotoUpload() {
 
                 DOM.detectionBadge.textContent = result.gemini_used 
                     ? '✨ شناسایی شده توسط Gemini Vision'
-                    : '📷 استخراج رنگ و ویژگی‌های تصویر (پس‌زمینه حذف شد)';
+                    : '📷 استخراج رنگ و ویژگی‌های تصویر در مرورگر';
                 
                 DOM.detectionNote.textContent = result.gemini_used
                     ? 'هوش مصنوعی بینایی با دقت بالا لباس را تحلیل کرد.'
-                    : 'لباس با موفقیت پردازش شد و پس‌زمینه آن جدا گردید.';
+                    : 'لباس با موفقیت پردازش شد و آماده ثبت در کمد است.';
 
                 DOM.detectionResultBox.style.display = 'block';
                 DOM.detectionResultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2265,34 +2472,52 @@ function setupPhotoUpload() {
             return;
         }
 
-        try {
-            const res = await fetch('/api/wardrobe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    name, 
-                    category, 
-                    color, 
-                    season,
-                    image_url: state.detectedImageUrl || undefined
-                })
-            });
+        let savedOnBackend = false;
+        if (!isStaticHost()) {
+            try {
+                const res = await fetch('/api/wardrobe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name, 
+                        category, 
+                        color, 
+                        season,
+                        image_url: state.detectedImageUrl || undefined
+                    })
+                });
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(extractApiErrorMessage(errData, 'خطا در ذخیره لباس در کمد'));
-            }
-
-            const data = await res.json();
-            showToast(data.message || 'لباس با موفقیت در کمد شخصی شما ثبت گردید!', 'success');
-            state.detectedImageUrl = null;
-            resetPhotoUpload();
-            DOM.detectionResultBox.style.display = 'none';
-            loadWardrobe();
-            triggerAutoSync();
-        } catch (err) {
-            showToast(err.message, 'error');
+                if (res.ok) {
+                    savedOnBackend = true;
+                }
+            } catch (_) {}
         }
+
+        // Always ensure saved into local storage (for GitHub Pages & offline)
+        const localItems = getLocalWardrobe();
+        const newItem = {
+            id: Date.now(),
+            name,
+            category,
+            color,
+            season,
+            image_url: state.detectedImageUrl || getGarmentFallbackImage(name, category)
+        };
+        const existingIdx = localItems.findIndex(w => w.name === name);
+        if (existingIdx >= 0) {
+            localItems[existingIdx] = newItem;
+        } else {
+            localItems.unshift(newItem);
+        }
+        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+        state.wardrobe = localItems;
+
+        showToast('لباس با موفقیت در کمد شخصی شما ثبت گردید!', 'success');
+        state.detectedImageUrl = null;
+        resetPhotoUpload();
+        DOM.detectionResultBox.style.display = 'none';
+        await loadWardrobe();
+        triggerAutoSync();
     });
 
     DOM.discardDetectedBtn.addEventListener('click', () => {
@@ -2477,43 +2702,79 @@ async function submitBulkUpload() {
     if (DOM.bulkProgressText) DOM.bulkProgressText.textContent = `در حال آماده‌سازی و ارسال ${state.bulkUploadFiles.length} عکس به سرور...`;
     if (DOM.bulkUploadSubmitBtn) DOM.bulkUploadSubmitBtn.disabled = true;
 
-    showLoading('تحلیل گروهی تصاویر لباس...', `در حال پردازش هوشمند ${state.bulkUploadFiles.length} تصویر و جداسازی پس‌زمینه...`);
+    showLoading('تحلیل گروهی تصاویر لباس...', `در حال پردازش هوشمند ${state.bulkUploadFiles.length} تصویر...`);
 
-    try {
-        const formData = new FormData();
-        state.bulkUploadFiles.forEach(file => {
-            formData.append('files', file);
-        });
+    let backendSuccess = false;
+    if (!isStaticHost()) {
+        try {
+            const formData = new FormData();
+            state.bulkUploadFiles.forEach(file => {
+                formData.append('files', file);
+            });
 
-        if (DOM.bulkProgressBar) DOM.bulkProgressBar.style.width = '60%';
-        if (DOM.bulkProgressText) DOM.bulkProgressText.textContent = 'هوش مصنوعی در حال شناسایی نوع پوشاک و حذف پس‌زمینه...';
+            if (DOM.bulkProgressBar) DOM.bulkProgressBar.style.width = '60%';
+            if (DOM.bulkProgressText) DOM.bulkProgressText.textContent = 'هوش مصنوعی در حال شناسایی نوع پوشاک و حذف پس‌زمینه...';
 
-        const res = await fetch('/api/wardrobe/bulk-upload', {
-            method: 'POST',
-            body: formData
-        });
+            const res = await fetch('/api/wardrobe/bulk-upload', {
+                method: 'POST',
+                body: formData
+            });
 
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(extractApiErrorMessage(errData, 'خطا در آپلود و پردازش گروهی'));
+            if (res.ok) {
+                const data = await res.json();
+                backendSuccess = true;
+                showToast(data.message || `${data.saved_count || state.bulkUploadFiles.length} لباس به کمد افزوده شد!`, 'success');
+            }
+        } catch (e) {
+            console.warn('Backend bulk upload failed, switching to client-side analyzer:', e);
         }
-
-        const data = await res.json();
-        if (DOM.bulkProgressBar) DOM.bulkProgressBar.style.width = '100%';
-        if (DOM.bulkProgressText) DOM.bulkProgressText.textContent = 'تمام شد!';
-
-        showToast(data.message || `${data.saved_count || state.bulkUploadFiles.length} لباس به کمد افزوده شد!`, 'success');
-        clearBulkUploadFiles();
-        if (DOM.bulkProgressWrap) DOM.bulkProgressWrap.style.display = 'none';
-        loadWardrobe();
-        triggerAutoSync();
-    } catch (err) {
-        console.error('Bulk upload error:', err);
-        showToast(err.message, 'error');
-    } finally {
-        hideLoading();
-        if (DOM.bulkUploadSubmitBtn) DOM.bulkUploadSubmitBtn.disabled = false;
     }
+
+    // Client-side fallback for GitHub Pages and offline
+    if (!backendSuccess) {
+        try {
+            const localItems = getLocalWardrobe();
+            let addedCount = 0;
+            for (let i = 0; i < state.bulkUploadFiles.length; i++) {
+                const file = state.bulkUploadFiles[i];
+                const pct = Math.round(((i + 1) / state.bulkUploadFiles.length) * 100);
+                if (DOM.bulkProgressBar) DOM.bulkProgressBar.style.width = `${pct}%`;
+                if (DOM.bulkProgressText) DOM.bulkProgressText.textContent = `پردازش تصویر ${i + 1} از ${state.bulkUploadFiles.length}...`;
+
+                const analyzed = await processImageLocally(file);
+                const newItem = {
+                    id: Date.now() + Math.floor(Math.random() * 10000),
+                    name: analyzed.name,
+                    category: analyzed.category,
+                    color: analyzed.color,
+                    season: analyzed.season,
+                    image_url: analyzed.dataUrl
+                };
+                const existingIdx = localItems.findIndex(w => w.name === newItem.name);
+                if (existingIdx >= 0) {
+                    localItems[existingIdx] = newItem;
+                } else {
+                    localItems.unshift(newItem);
+                }
+                addedCount++;
+            }
+            localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+            state.wardrobe = localItems;
+            showToast(`${addedCount} لباس با موفقیت توسط تحلیلگر مرورگر به کمد شما افزوده شد!`, 'success');
+        } catch (err) {
+            console.error('Client bulk upload error:', err);
+            showToast('خطا در پردازش تصاویر: ' + err.message, 'error');
+        }
+    }
+
+    if (DOM.bulkProgressBar) DOM.bulkProgressBar.style.width = '100%';
+    if (DOM.bulkProgressText) DOM.bulkProgressText.textContent = 'تمام شد!';
+    clearBulkUploadFiles();
+    if (DOM.bulkProgressWrap) DOM.bulkProgressWrap.style.display = 'none';
+    hideLoading();
+    if (DOM.bulkUploadSubmitBtn) DOM.bulkUploadSubmitBtn.disabled = false;
+    await loadWardrobe();
+    triggerAutoSync();
 }
 
 // ------------------------------------------------------------
@@ -2663,35 +2924,57 @@ function removeBulkParsedRow(index) {
 async function submitBulkItemsPayload(items) {
     if (!items || items.length === 0) return;
 
-    showLoading('ثبت گروهی لباس‌ها در کمد...', `در حال افزودن ${items.length} آیتم به پایگاه‌داده کمد شخصی...`);
+    showLoading('ثبت گروهی لباس‌ها در کمد...', `در حال افزودن ${items.length} آیتم به کمد شخصی...`);
 
-    try {
-        const res = await fetch('/api/wardrobe/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items })
-        });
+    let savedOnBackend = false;
+    if (!isStaticHost()) {
+        try {
+            const res = await fetch('/api/wardrobe/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items })
+            });
 
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(extractApiErrorMessage(errData, 'خطا در ثبت گروهی لباس‌ها'));
+            if (res.ok) {
+                const data = await res.json();
+                savedOnBackend = true;
+                showToast(data.message || `${data.added_count} لباس با موفقیت به کمد شما افزوده شد!`, 'success');
+            }
+        } catch (e) {
+            console.warn('Backend bulk save unavailable, saving locally:', e);
         }
-
-        const data = await res.json();
-        showToast(data.message || `${data.added_count} لباس با موفقیت به کمد شما افزوده شد!`, 'success');
-
-        state.parsedBulkItems = [];
-        if (DOM.bulkTextInput) DOM.bulkTextInput.value = '';
-        if (DOM.bulkParsedTableWrap) DOM.bulkParsedTableWrap.style.display = 'none';
-
-        loadWardrobe();
-        triggerAutoSync();
-    } catch (err) {
-        console.error('Bulk save error:', err);
-        showToast(err.message, 'error');
-    } finally {
-        hideLoading();
     }
+
+    if (!savedOnBackend) {
+        const localItems = getLocalWardrobe();
+        items.forEach(it => {
+            const newItem = {
+                id: Date.now() + Math.floor(Math.random() * 10000),
+                name: it.name,
+                category: it.category || 'کاپشن',
+                color: it.color || 'مشکی',
+                season: it.season || 'چهارفصل',
+                image_url: getGarmentFallbackImage(it.name, it.category)
+            };
+            const existingIdx = localItems.findIndex(w => w.name === newItem.name);
+            if (existingIdx >= 0) {
+                localItems[existingIdx] = newItem;
+            } else {
+                localItems.unshift(newItem);
+            }
+        });
+        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+        state.wardrobe = localItems;
+        showToast(`${items.length} لباس با موفقیت در کمد شخصی شما ثبت گردید!`, 'success');
+    }
+
+    state.parsedBulkItems = [];
+    if (DOM.bulkTextInput) DOM.bulkTextInput.value = '';
+    if (DOM.bulkParsedTableWrap) DOM.bulkParsedTableWrap.style.display = 'none';
+
+    hideLoading();
+    await loadWardrobe();
+    triggerAutoSync();
 }
 
 function insertBulkTemplate(type) {
@@ -3063,26 +3346,45 @@ function setupEventListeners() {
             return;
         }
 
-        try {
-            const res = await fetch('/api/wardrobe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, category, color, season })
-            });
+        let savedOnBackend = false;
+        if (!isStaticHost()) {
+            try {
+                const res = await fetch('/api/wardrobe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, category, color, season })
+                });
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(extractApiErrorMessage(errData, 'خطا در ثبت لباس'));
-            }
-
-            const data = await res.json();
-            showToast(data.message || 'لباس با موفقیت به کمد افزوده شد!', 'success');
-            DOM.manualForm.reset();
-            loadWardrobe();
-            triggerAutoSync();
-        } catch (err) {
-            showToast(err.message, 'error');
+                if (res.ok) {
+                    savedOnBackend = true;
+                }
+            } catch (_) {}
         }
+
+        if (!savedOnBackend) {
+            const localItems = getLocalWardrobe();
+            const newItem = {
+                id: Date.now(),
+                name,
+                category,
+                color,
+                season,
+                image_url: getGarmentFallbackImage(name, category)
+            };
+            const existingIdx = localItems.findIndex(w => w.name === name);
+            if (existingIdx >= 0) {
+                localItems[existingIdx] = newItem;
+            } else {
+                localItems.unshift(newItem);
+            }
+            localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+            state.wardrobe = localItems;
+        }
+
+        showToast('لباس با موفقیت به کمد افزوده شد!', 'success');
+        DOM.manualForm.reset();
+        await loadWardrobe();
+        triggerAutoSync();
     });
 
     // Wardrobe Category Filters
