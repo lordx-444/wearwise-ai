@@ -2196,15 +2196,20 @@ function setupSyncModal() {
 // Image Vision & Photo Upload Handling
 // -------------------------------------------------------------
 async function callGeminiVisionClientSide(apiKey, base64Data, mimeType) {
-    const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
-    const prompt = `شما یک متخصص مد، استایل و هوش مصنوعی بینایی هستید. این تصویر یک لباس، کفش یا اکسسوری (مانند ساعت مچی، عینک، کلاه، دستبند، کیف، شال، کمربند، شلوار، پیراهن یا پوشاک) است.
+    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+    const prompt = `شما یک متخصص مد، استایل و هوش مصنوعی بینایی هستید. این تصویر یک لباس، کفش یا اکسسوری (مانند ساعت مچی، عینک، کلاه، دستبند، کیف، شال، کمربند، شلوار، تیشرت، پیراهن یا پوشاک) است.
 لطفاً با دقت بالا تصویر را تحلیل کرده و خروجی را دقیقاً در قالب فرمت JSON زیر به زبان فارسی برگردانید (هیچ متن، توضیح یا مارک‌داون اضافی نفرستید):
 {
-  "name": "نام دقیق و شیک آیتم (مثلاً: ساعت مچی استیل یا ساعت هوشمند مشکی یا کاپشن بادی سرمه‌ای)",
-  "category": "یکی از این موارد دقیق: اکسسوری, کفش, شلوار, کاپشن, پالتو, هودی, پلیور, پیراهن, تیشرت",
-  "color": "رنگ اصلی آیتم (مثلاً: نقره‌ای, طلایی, مشکی, سرمه‌ای, قهوه‌ای, طوسی)",
-  "season": "یکی از این موارد: چهارفصل, پاییز و زمستان, بهار و تابستان, زمستان"
-}`;
+  "name": "نام دقیق و شیک آیتم (مثلاً: تیشرت نخی مشکی، پیراهن آکسفورد آبی، ساعت مچی استیل)",
+  "category": "یکی از این موارد دقیق: تیشرت, پیراهن, شلوار, کفش, اکسسوری, هودی, پلیور, کاپشن, پالتو",
+  "color": "رنگ اصلی آیتم (مثلاً: مشکی, سفید, طوسی, سرمه‌ای, آبی, کرم, قهوه‌ای, قرمز, سبز)",
+  "season": "یکی از این موارد: تابستان, بهار و تابستان, پاییز و زمستان, زمستان, چهارفصل"
+}
+
+دستورالعمل بسیار مهم و قطعی برای تفکیک تیشرت از پیراهن:
+۱. اگر لباس دارای آستین کوتاه، یقه گرد، یقه هفت، جنس تریکو یا پنبه‌ای، کشباف، پلوشرت اسپرت، تاپ یا بدون دکمه‌های سرتاسری جلویی است، حتماً و موکداً دسته‌بندی (category) را دقیقاً "تیشرت" بگذارید و نام (name) را با "تیشرت" آغاز نمایید (مثلاً: "تیشرت نخی مشکی" یا "تیشرت سفید آستین کوتاه"). هرگز و به هیچ وجه تیشرت را "پیراهن" نام‌گذاری نکنید!
+۲. دسته‌بندی "پیراهن" را فقط و فقط برای پیراهن‌های دکمه‌دار مردانه رسمی یا مجلسی آستین‌دار به کار ببرید.
+۳. برای ساعت، عینک، کلاه، دستبند، شال یا کمربند، دسته‌بندی حتماً "اکسسوری" باشد.`;
 
     const bodyData = JSON.stringify({
         contents: [{
@@ -2363,7 +2368,11 @@ async function processImageLocally(file) {
                 let season = "چهارفصل";
 
                 // Heuristic Classification based on filename keywords and geometry
-                if (fn.includes('watch') || fn.includes('clock') || fn.includes('smartwatch') || fn.includes('ساعت') || fn.includes('مچی') || fn.includes('زمان')) {
+                if (fn.includes('tshirt') || fn.includes('t-shirt') || fn.includes('تیشرت') || fn.includes('تی‌شرت') || fn.includes('tee') || fn.includes('پلوشرت') || fn.includes('پولوشرت') || fn.includes('تاپ')) {
+                    category = "تیشرت";
+                    name = `تیشرت نخی ${color}`;
+                    season = "بهار و تابستان";
+                } else if (fn.includes('watch') || fn.includes('clock') || fn.includes('smartwatch') || fn.includes('ساعت') || fn.includes('مچی') || fn.includes('زمان')) {
                     category = "اکسسوری";
                     name = `ساعت مچی ${color}`;
                     season = "چهارفصل";
@@ -2403,16 +2412,16 @@ async function processImageLocally(file) {
                     category = "پلیور";
                     name = `پلیور بافت ${color}`;
                     season = "پاییز و زمستان";
-                } else if (fn.includes('shirt') || fn.includes('tshirt') || fn.includes('تیشرت') || fn.includes('پیراهن')) {
+                } else if (fn.includes('shirt') || fn.includes('پیراهن') || fn.includes('بلوز') || fn.includes('شومیز')) {
                     category = "پیراهن";
                     name = `پیراهن ${color}`;
-                    season = "بهار و تابستان";
+                    season = "چهارفصل";
                 } else if (fn.includes('jacket') || fn.includes('coat') || fn.includes('کاپشن') || fn.includes('پالتو') || fn.includes('بارانی') || fn.includes('پافر')) {
                     category = "کاپشن";
                     name = `کاپشن یا بارانی ${color}`;
                     season = "پاییز و زمستان";
                 } else {
-                    // Geometry-based fallback when filename has no descriptive words: NEVER force to winter jacket!
+                    // Geometry & aspect ratio fallback when filename is generic (IMG_..., Photo_..., etc.)
                     if (ratio > 1.6) {
                         category = "شلوار";
                         name = `شلوار ${color}`;
@@ -2421,15 +2430,16 @@ async function processImageLocally(file) {
                         category = "کفش";
                         name = `کفش یا کتانی ${color}`;
                         season = "چهارفصل";
-                    } else if (ratio >= 0.82 && ratio <= 1.45) {
-                        // Square or vertical close-up (watch, bracelet, accessory, folded item)
+                    } else if (ratio >= 0.90 && ratio <= 1.15 && (brightness < 60 || brightness > 190 || saturation < 15)) {
+                        // Square close-up object
                         category = "اکسسوری";
                         name = `ساعت مچی یا اکسسوری ${color}`;
                         season = "چهارفصل";
                     } else {
-                        category = "پیراهن";
-                        name = `پیراهن یا لباس ${color}`;
-                        season = "چهارفصل";
+                        // Standard casual upper garment defaults to t-shirt (most common daily casual wear)
+                        category = "تیشرت";
+                        name = `تیشرت نخی ${color}`;
+                        season = "بهار و تابستان";
                     }
                 }
 
@@ -2545,12 +2555,12 @@ function setupPhotoUpload() {
                 DOM.detectedSeason.value = item.season || 'چهارفصل';
 
                 DOM.detectionBadge.textContent = result.gemini_used 
-                    ? '✨ شناسایی دقیق با هوش مصنوعی بینایی Gemini'
-                    : '📷 تحلیل محلی ویژگی‌های تصویر در مرورگر';
+                    ? '✨ شناسایی با هوش مصنوعی بینایی Google Gemini'
+                    : '📷 تحلیل هوشمند محلی رنگ و فرم در مرورگر';
                 
-                DOM.detectionNote.textContent = result.gemini_used
-                    ? 'هوش مصنوعی بینایی Google Gemini با دقت بالا این آیتم را تشخیص داد.'
-                    : 'در صورت نیاز می‌توانید نام و دسته‌بندی بالا را پیش از ثبت در کمد ویرایش نمایید.';
+                DOM.detectionNote.innerHTML = result.gemini_used
+                    ? 'هوش مصنوعی Gemini مدل، جنس و رنگ لباس را شناسایی کرد. در صورت نیاز می‌توانید ویرایش کنید.'
+                    : '⚠️ توجه: در حالت آفلاین/بدون اتصال هوش مصنوعی تحلیل شد. با دکمه‌های سریع زیر می‌توانید فوراً دسته‌بندی را روی <b>تیشرت</b> یا <b>پیراهن</b> قرار دهید:';
 
                 DOM.detectionResultBox.style.display = 'block';
                 DOM.detectionResultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
