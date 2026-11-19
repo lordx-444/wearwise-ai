@@ -2196,13 +2196,8 @@ function setupSyncModal() {
 // Image Vision & Photo Upload Handling
 // -------------------------------------------------------------
 async function callGeminiVisionClientSide(apiKey, base64Data, mimeType) {
-    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
-    let lastError = null;
-
-    for (const model of models) {
-        try {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-            const prompt = `شما یک متخصص مد، استایل و هوش مصنوعی بینایی هستید. این تصویر یک لباس، کفش یا اکسسوری (مانند ساعت مچی، عینک، کلاه، دستبند، کیف، شال، کمربند یا پوشاک) است.
+    const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+    const prompt = `شما یک متخصص مد، استایل و هوش مصنوعی بینایی هستید. این تصویر یک لباس، کفش یا اکسسوری (مانند ساعت مچی، عینک، کلاه، دستبند، کیف، شال، کمربند، شلوار، پیراهن یا پوشاک) است.
 لطفاً با دقت بالا تصویر را تحلیل کرده و خروجی را دقیقاً در قالب فرمت JSON زیر به زبان فارسی برگردانید (هیچ متن، توضیح یا مارک‌داون اضافی نفرستید):
 {
   "name": "نام دقیق و شیک آیتم (مثلاً: ساعت مچی استیل یا ساعت هوشمند مشکی یا کاپشن بادی سرمه‌ای)",
@@ -2211,45 +2206,59 @@ async function callGeminiVisionClientSide(apiKey, base64Data, mimeType) {
   "season": "یکی از این موارد: چهارفصل, پاییز و زمستان, بهار و تابستان, زمستان"
 }`;
 
-            const res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: prompt },
-                            {
-                                inline_data: {
-                                    mime_type: mimeType || 'image/jpeg',
-                                    data: base64Data
-                                }
-                            }
-                        ]
-                    }],
-                    generationConfig: {
-                        temperature: 0.1
+    const bodyData = JSON.stringify({
+        contents: [{
+            parts: [
+                { text: prompt },
+                {
+                    inline_data: {
+                        mime_type: mimeType || 'image/jpeg',
+                        data: base64Data
                     }
-                })
-            });
-
-            if (res.ok) {
-                const json = await res.json();
-                const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-                const parsed = JSON.parse(cleaned);
-                if (parsed && parsed.name) {
-                    return parsed;
                 }
-            } else {
-                const errText = await res.text().catch(() => '');
-                console.warn(`Vision model ${model} response error:`, res.status, errText);
+            ]
+        }],
+        generationConfig: {
+            temperature: 0.1
+        }
+    });
+
+    for (const model of models) {
+        const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        
+        // List of candidate endpoints: direct first, then anti-sanction CORS proxies
+        const candidateUrls = [
+            directUrl,
+            `https://corsproxy.io/?${encodeURIComponent(directUrl)}`
+        ];
+
+        for (const url of candidateUrls) {
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: bodyData
+                });
+
+                if (res.ok) {
+                    const json = await res.json();
+                    const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                    const parsed = JSON.parse(cleaned);
+                    if (parsed && parsed.name) {
+                        return parsed;
+                    }
+                } else {
+                    const errText = await res.text().catch(() => '');
+                    console.warn(`Vision call via ${url.slice(0, 35)} failed (${res.status}):`, errText);
+                }
+            } catch (err) {
+                console.warn(`Vision network error with ${url.slice(0, 35)}:`, err.message);
             }
-        } catch (e) {
-            lastError = e;
-            console.warn(`Vision model ${model} failed:`, e);
         }
     }
-    throw lastError || new Error('All vision models failed');
+
+    throw new Error('عدم دریافت پاسخ از سرور هوش مصنوعی (احتمالاً تحریم یا فیلترشکن خاموش است)');
 }
 
 async function processImageLocally(file) {
@@ -2403,28 +2412,24 @@ async function processImageLocally(file) {
                     name = `کاپشن یا بارانی ${color}`;
                     season = "پاییز و زمستان";
                 } else {
-                    // Geometry-based fallback when filename has no descriptive words
-                    if (ratio > 1.45) {
+                    // Geometry-based fallback when filename has no descriptive words: NEVER force to winter jacket!
+                    if (ratio > 1.6) {
                         category = "شلوار";
-                        name = `شلوار راسته ${color}`;
+                        name = `شلوار ${color}`;
                         season = "چهارفصل";
                     } else if (ratio < 0.72) {
                         category = "کفش";
                         name = `کفش یا کتانی ${color}`;
                         season = "چهارفصل";
-                    } else if (ratio >= 0.85 && ratio <= 1.2) {
-                        // Square shaped photo is typical for watches, accessories, hats, or folded garments
+                    } else if (ratio >= 0.82 && ratio <= 1.45) {
+                        // Square or vertical close-up (watch, bracelet, accessory, folded item)
                         category = "اکسسوری";
                         name = `ساعت مچی یا اکسسوری ${color}`;
                         season = "چهارفصل";
-                    } else if (ratio > 1.2) {
-                        category = "کاپشن";
-                        name = `کاپشن ${color}`;
-                        season = "پاییز و زمستان";
                     } else {
-                        category = "هودی";
-                        name = `هودی یا پلیور ${color}`;
-                        season = "پاییز و زمستان";
+                        category = "پیراهن";
+                        name = `پیراهن یا لباس ${color}`;
+                        season = "چهارفصل";
                     }
                 }
 
@@ -3542,6 +3547,14 @@ window.removeBulkUploadFile = removeBulkUploadFile;
 window.removeBulkParsedRow = removeBulkParsedRow;
 window.pushToCloud = pushToCloud;
 window.pullFromCloud = pullFromCloud;
+window.quickSetCategory = function(cat, label) {
+    if (DOM.detectedCategory) DOM.detectedCategory.value = cat;
+    if (DOM.detectedName) {
+        const colorInput = DOM.detectedColor ? DOM.detectedColor.value.trim() : '';
+        DOM.detectedName.value = colorInput ? `${label} ${colorInput}` : label;
+    }
+    showToast(`دسته‌بندی به «${cat}» تنظیم شد.`, 'info');
+};
 
 // Initial Startup
 document.addEventListener('DOMContentLoaded', () => {
