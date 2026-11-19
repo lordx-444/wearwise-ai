@@ -396,6 +396,9 @@ const DOM = {
     detectionResultBox: document.getElementById('detectionResultBox'),
     detectionBadge: document.getElementById('detectionBadge'),
     detectionNote: document.getElementById('detectionNote'),
+    detectedDetailsBox: document.getElementById('detectedDetailsBox'),
+    detectedDetailsText: document.getElementById('detectedDetailsText'),
+    detectedStyleBadge: document.getElementById('detectedStyleBadge'),
     detectedName: document.getElementById('detectedName'),
     detectedCategory: document.getElementById('detectedCategory'),
     detectedColor: document.getElementById('detectedColor'),
@@ -2196,20 +2199,38 @@ function setupSyncModal() {
 // Image Vision & Photo Upload Handling
 // -------------------------------------------------------------
 async function callGeminiVisionClientSide(apiKey, base64Data, mimeType) {
-    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
-    const prompt = `شما یک متخصص مد، استایل و هوش مصنوعی بینایی هستید. این تصویر یک لباس، کفش یا اکسسوری (مانند ساعت مچی، عینک، کلاه، دستبند، کیف، شال، کمربند، شلوار، تیشرت، پیراهن یا پوشاک) است.
-لطفاً با دقت بالا تصویر را تحلیل کرده و خروجی را دقیقاً در قالب فرمت JSON زیر به زبان فارسی برگردانید (هیچ متن، توضیح یا مارک‌داون اضافی نفرستید):
-{
-  "name": "نام دقیق و شیک آیتم (مثلاً: تیشرت نخی مشکی، پیراهن آکسفورد آبی، ساعت مچی استیل)",
-  "category": "یکی از این موارد دقیق: تیشرت, پیراهن, شلوار, کفش, اکسسوری, هودی, پلیور, کاپشن, پالتو",
-  "color": "رنگ اصلی آیتم (مثلاً: مشکی, سفید, طوسی, سرمه‌ای, آبی, کرم, قهوه‌ای, قرمز, سبز)",
-  "season": "یکی از این موارد: تابستان, بهار و تابستان, پاییز و زمستان, زمستان, چهارفصل"
-}
+    const models = [
+        'gemini-3.1-flash-lite',
+        'gemini-3.5-flash-lite',
+        'gemini-3.5-flash',
+        'gemini-3.8-flash',
+        'gemini-2.5-flash'
+    ];
+    const prompt = `شما یک کارشناس ارشد مد و استایل، طراح لباس و متخصص بینایی ماشین هستید.
+این تصویر لباس یا اکسسوری را با دقت بسیار بالا، موشکافانه و جزء به جزء بررسی کنید.
 
-دستورالعمل بسیار مهم و قطعی برای تفکیک تیشرت از پیراهن:
-۱. اگر لباس دارای آستین کوتاه، یقه گرد، یقه هفت، جنس تریکو یا پنبه‌ای، کشباف، پلوشرت اسپرت، تاپ یا بدون دکمه‌های سرتاسری جلویی است، حتماً و موکداً دسته‌بندی (category) را دقیقاً "تیشرت" بگذارید و نام (name) را با "تیشرت" آغاز نمایید (مثلاً: "تیشرت نخی مشکی" یا "تیشرت سفید آستین کوتاه"). هرگز و به هیچ وجه تیشرت را "پیراهن" نام‌گذاری نکنید!
-۲. دسته‌بندی "پیراهن" را فقط و فقط برای پیراهن‌های دکمه‌دار مردانه رسمی یا مجلسی آستین‌دار به کار ببرید.
-۳. برای ساعت، عینک، کلاه، دستبند، شال یا کمربند، دسته‌بندی حتماً "اکسسوری" باشد.`;
+دستورالعمل تولید «name» (بسیار مهم):
+نام آیتم باید کاملاً دقیق، پر جزئیات و توصیفی باشد (حدود ۵ تا ۹ کلمه) و همه مشخصات ظاهری زیر را در بر بگیرد:
+- نوع دقیق آیتم (مثلاً: تیشرت، پیراهن دکمه‌دار، شلوار جین، کفش کتانی، ساعت مچی، هودی، کاپشن بادی)
+- فرم و برش (اوورسایز، راسته، اسلیم‌فیت، لانگ، بگ، مام‌استایل و...)
+- جزئیات طراحی (یقه گرد، یقه هفت، دکمه‌دار، آستین کوتاه، آستین بلند، کلاه‌دار، زیپ‌دار، جیب‌دار، بند چرمی و...)
+- جنس و بافت احتمالی (نخی پنبه‌ای، کتان، دنیم جین، چرم، بافت کشباف، استیل، سیلیکونی و...)
+- طرح و پترن (ساده مینیمال، چاپ گرافیکی، چهارخانه، راه‌راه، لوگودار، بدون طرح و...)
+- رنگ و تناژ دقیق (مشکی مات، سفید شیری، سرمه‌ای تیره، طوسی ملانژ، زیتونی و...)
+
+تفکیک دقیق تیشرت و پیراهن:
+- اگر لباس دارای آستین کوتاه، تریکو، پنبه‌ای، یقه گرد یا هفت، پلوشرت اسپرت یا بدون دکمه‌های سرتاسری جلویی است، نام حتماً با «تیشرت ...» شروع شود و category برابر «تیشرت» باشد.
+- «پیراهن» را منحصراً برای پیراهن‌های دکمه‌دار رسمی آستین‌دار به کار ببرید.
+
+خروجی را منحصراً در قالب فرمت JSON زیر به زبان فارسی برگردانید (هیچ متن، توضیح یا مارک‌داون اضافی نفرستید):
+{
+  "name": "نام کامل، دقیق و پرجزئیات لباس با تمام ویژگی‌های ظاهری به زبان فارسی",
+  "category": "یکی از موارد: تیشرت, پیراهن, شلوار, کفش, اکسسوری, هودی, پلیور, کاپشن, پالتو",
+  "color": "رنگ دقیق و تناژ",
+  "season": "یکی از موارد: بهار و تابستان, تابستان, پاییز و زمستان, زمستان, چهارفصل",
+  "style": "سبک لباس (مثلاً: کژوال روزمره، اسپرت، رسمی، استریت‌ویر)",
+  "details": "۲ یا ۳ مورد از بارزترین جزئیات ظاهری مانند نوع یقه، جنس، زیپ یا طرح"
+}`;
 
     const bodyData = JSON.stringify({
         contents: [{
@@ -2249,7 +2270,10 @@ async function callGeminiVisionClientSide(apiKey, base64Data, mimeType) {
                     const json = await res.json();
                     const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
                     const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-                    const parsed = JSON.parse(cleaned);
+                    let parsed = JSON.parse(cleaned);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        parsed = parsed[0];
+                    }
                     if (parsed && parsed.name) {
                         return parsed;
                     }
@@ -2306,6 +2330,8 @@ async function processImageLocally(file) {
                                 category: geminiRes.category || 'اکسسوری',
                                 color: geminiRes.color || 'مشکی',
                                 season: geminiRes.season || 'چهارفصل',
+                                details: geminiRes.details || '',
+                                style: geminiRes.style || '',
                                 gemini_used: true
                             });
                         }
@@ -2536,12 +2562,14 @@ function setupPhotoUpload() {
                         category: analyzed.category,
                         color: analyzed.color,
                         season: analyzed.season,
+                        details: analyzed.details,
+                        style: analyzed.style,
                         image_url: analyzed.dataUrl
                     }],
                     gemini_used: analyzed.gemini_used,
                     message: analyzed.gemini_used 
-                        ? 'لباس توسط هوش مصنوعی بینایی Gemini با موفقیت تحلیل گردید!' 
-                        : 'تصویر با موفقیت در مرورگر پردازش شد و آماده ذخیره است.'
+                        ? 'لباس با بررسی جزء به جزء و استخراج نام کامل توسط Gemini تحلیل گردید!' 
+                        : 'تصویر با تحلیل محلی ویژگی‌ها پردازش شد.'
                 };
             }
 
@@ -2554,13 +2582,26 @@ function setupPhotoUpload() {
                 DOM.detectedColor.value = item.color || '';
                 DOM.detectedSeason.value = item.season || 'چهارفصل';
 
+                if (DOM.detectedDetailsBox) {
+                    if (item.details) {
+                        DOM.detectedDetailsText.textContent = item.details;
+                        if (DOM.detectedStyleBadge) {
+                            DOM.detectedStyleBadge.textContent = item.style ? `سبک: ${item.style}` : 'جزئیات اختصاصی';
+                            DOM.detectedStyleBadge.style.display = 'inline-block';
+                        }
+                        DOM.detectedDetailsBox.style.display = 'block';
+                    } else {
+                        DOM.detectedDetailsBox.style.display = 'none';
+                    }
+                }
+
                 DOM.detectionBadge.textContent = result.gemini_used 
-                    ? '✨ شناسایی با هوش مصنوعی بینایی Google Gemini'
-                    : '📷 تحلیل هوشمند محلی رنگ و فرم در مرورگر';
+                    ? '✨ تحلیل موشکافانه با هوش مصنوعی بینایی Google Gemini'
+                    : '📷 تحلیل تخمینی مشخصات (موتور محلی)';
                 
                 DOM.detectionNote.innerHTML = result.gemini_used
-                    ? 'هوش مصنوعی Gemini مدل، جنس و رنگ لباس را شناسایی کرد. در صورت نیاز می‌توانید ویرایش کنید.'
-                    : '⚠️ توجه: در حالت آفلاین/بدون اتصال هوش مصنوعی تحلیل شد. با دکمه‌های سریع زیر می‌توانید فوراً دسته‌بندی را روی <b>تیشرت</b> یا <b>پیراهن</b> قرار دهید:';
+                    ? 'هوش مصنوعی Gemini تصویر را مو به مو بررسی کرد و تمام ویژگی‌ها، جنس و نام کامل آن را نوشت.'
+                    : '⚠️ توجه: کلید هوش مصنوعی فعال نیست یا متصل نشد. برای تحلیل دقیق و نام کامل، <button type="button" class="btn-chip" onclick="document.getElementById(\'apiKeyBtn\').click()" style="margin-inline: 4px; color: #a5b4fc; border-color: #6366f1;">🔑 تنظیم کلید Gemini</button> را بزنید یا دسته‌بندی را با دکمه‌های زیر انتخاب کنید:';
 
                 DOM.detectionResultBox.style.display = 'block';
                 DOM.detectionResultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
