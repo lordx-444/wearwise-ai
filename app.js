@@ -2196,32 +2196,60 @@ function setupSyncModal() {
 // Image Vision & Photo Upload Handling
 // -------------------------------------------------------------
 async function callGeminiVisionClientSide(apiKey, base64Data, mimeType) {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    const prompt = `این تصویر یک لباس یا اکسسوری است. لطفاً نوع دقیق، رنگ، فصل و نام آن را با فرمت JSON دقیق زیر به فارسی بازگردان (فقط JSON بدون علامت مارک‌داون یا توضیح دیگر):
-{"name": "نام دقیق و زیبای لباس", "category": "یک از: کاپشن, هودی, پلیور, شلوار, کفش, پیراهن, اکسسوری", "color": "رنگ اصلی لباس", "season": "یک از: پاییز و زمستان, بهار و تابستان, چهارفصل"}`;
+    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+    let lastError = null;
 
-    const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{
-                parts: [
-                    { text: prompt },
-                    {
-                        inline_data: {
-                            mime_type: mimeType || 'image/jpeg',
-                            data: base64Data
-                        }
+    for (const model of models) {
+        try {
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const prompt = `شما یک متخصص مد، استایل و هوش مصنوعی بینایی هستید. این تصویر یک لباس، کفش یا اکسسوری (مانند ساعت مچی، عینک، کلاه، دستبند، کیف، شال، کمربند یا پوشاک) است.
+لطفاً با دقت بالا تصویر را تحلیل کرده و خروجی را دقیقاً در قالب فرمت JSON زیر به زبان فارسی برگردانید (هیچ متن، توضیح یا مارک‌داون اضافی نفرستید):
+{
+  "name": "نام دقیق و شیک آیتم (مثلاً: ساعت مچی استیل یا ساعت هوشمند مشکی یا کاپشن بادی سرمه‌ای)",
+  "category": "یکی از این موارد دقیق: اکسسوری, کفش, شلوار, کاپشن, پالتو, هودی, پلیور, پیراهن, تیشرت",
+  "color": "رنگ اصلی آیتم (مثلاً: نقره‌ای, طلایی, مشکی, سرمه‌ای, قهوه‌ای, طوسی)",
+  "season": "یکی از این موارد: چهارفصل, پاییز و زمستان, بهار و تابستان, زمستان"
+}`;
+
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: prompt },
+                            {
+                                inline_data: {
+                                    mime_type: mimeType || 'image/jpeg',
+                                    data: base64Data
+                                }
+                            }
+                        ]
+                    }],
+                    generationConfig: {
+                        temperature: 0.1
                     }
-                ]
-            }]
-        })
-    });
-    if (!res.ok) throw new Error('Gemini API request failed');
-    const json = await res.json();
-    const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
+                })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                const parsed = JSON.parse(cleaned);
+                if (parsed && parsed.name) {
+                    return parsed;
+                }
+            } else {
+                const errText = await res.text().catch(() => '');
+                console.warn(`Vision model ${model} response error:`, res.status, errText);
+            }
+        } catch (e) {
+            lastError = e;
+            console.warn(`Vision model ${model} failed:`, e);
+        }
+    }
+    throw lastError || new Error('All vision models failed');
 }
 
 async function processImageLocally(file) {
@@ -2251,26 +2279,28 @@ async function processImageLocally(file) {
                 ctx.drawImage(img, 0, 0, w, h);
                 const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
 
+                // 1. Try Gemini Vision if API key is stored
                 const apiKey = localStorage.getItem('wearwise_gemini_key');
-                if (apiKey && apiKey.length > 10) {
+                if (apiKey && apiKey.trim().length > 10) {
                     try {
                         const base64Data = compressedDataUrl.split(',')[1];
-                        const geminiRes = await callGeminiVisionClientSide(apiKey, base64Data, 'image/jpeg');
+                        const geminiRes = await callGeminiVisionClientSide(apiKey.trim(), base64Data, 'image/jpeg');
                         if (geminiRes && geminiRes.name) {
                             return resolve({
                                 dataUrl: compressedDataUrl,
                                 name: geminiRes.name,
-                                category: geminiRes.category || 'کاپشن',
+                                category: geminiRes.category || 'اکسسوری',
                                 color: geminiRes.color || 'مشکی',
-                                season: geminiRes.season || 'پاییز و زمستان',
+                                season: geminiRes.season || 'چهارفصل',
                                 gemini_used: true
                             });
                         }
                     } catch (gErr) {
-                        console.warn('Client-side Gemini Vision call failed, using heuristic:', gErr);
+                        console.warn('Client-side Gemini Vision call failed, using heuristic engine:', gErr);
                     }
                 }
 
+                // 2. Intelligent Canvas Pixel Color & Aspect Ratio Heuristic Engine
                 const imgData = ctx.getImageData(
                     Math.floor(w * 0.25),
                     Math.floor(h * 0.25),
@@ -2280,9 +2310,12 @@ async function processImageLocally(file) {
                 const pixels = imgData.data;
                 let totalR = 0, totalG = 0, totalB = 0, count = 0;
                 for (let i = 0; i < pixels.length; i += 16) {
-                    totalR += pixels[i];
-                    totalG += pixels[i + 1];
-                    totalB += pixels[i + 2];
+                    const r = pixels[i];
+                    const g = pixels[i + 1];
+                    const b = pixels[i + 2];
+                    totalR += r;
+                    totalG += g;
+                    totalB += b;
                     count++;
                 }
                 const avgR = count ? Math.round(totalR / count) : 100;
@@ -2299,11 +2332,11 @@ async function processImageLocally(file) {
                 } else if (brightness > 200 && saturation < 25) {
                     color = "سفید";
                 } else if (saturation < 22) {
-                    color = "طوسی";
+                    color = brightness > 140 ? "نقره‌ای / طوسی روشن" : "طوسی";
                 } else if (avgB > avgR + 15 && avgB > avgG) {
                     color = brightness < 100 ? "سرمه‌ای" : "آبی";
                 } else if (avgR > avgB + 20 && avgG > avgB + 10 && brightness > 130) {
-                    color = "کرم / بژ";
+                    color = avgR > 180 ? "طلایی / بژ" : "کرم";
                 } else if (avgR > avgG + 25 && avgR > avgB + 25) {
                     color = brightness < 110 ? "زرشکی" : "قرمز";
                 } else if (avgG > avgR + 15 && avgG > avgB + 15) {
@@ -2316,44 +2349,75 @@ async function processImageLocally(file) {
 
                 const fn = (file.name || '').toLowerCase();
                 const ratio = img.height / (img.width || 1);
-                let category = "کاپشن";
+                let category = "اکسسوری";
                 let name = "";
-                let season = "پاییز و زمستان";
+                let season = "چهارفصل";
 
-                if (fn.includes('pant') || fn.includes('jean') || fn.includes('شلوار') || fn.includes('اسلش')) {
+                // Heuristic Classification based on filename keywords and geometry
+                if (fn.includes('watch') || fn.includes('clock') || fn.includes('smartwatch') || fn.includes('ساعت') || fn.includes('مچی') || fn.includes('زمان')) {
+                    category = "اکسسوری";
+                    name = `ساعت مچی ${color}`;
+                    season = "چهارفصل";
+                } else if (fn.includes('glass') || fn.includes('عینک') || fn.includes('optical') || fn.includes('shade') || fn.includes('spectacle')) {
+                    category = "اکسسوری";
+                    name = `عینک ${color}`;
+                    season = "چهارفصل";
+                } else if (fn.includes('hat') || fn.includes('cap') || fn.includes('beanie') || fn.includes('کلاه')) {
+                    category = "اکسسوری";
+                    name = `کلاه ${color}`;
+                    season = "پاییز و زمستان";
+                } else if (fn.includes('belt') || fn.includes('کمربند')) {
+                    category = "اکسسوری";
+                    name = `کمربند چرمی ${color}`;
+                    season = "چهارفصل";
+                } else if (fn.includes('bag') || fn.includes('wallet') || fn.includes('backpack') || fn.includes('کیف') || fn.includes('کوله')) {
+                    category = "اکسسوری";
+                    name = `کیف ${color}`;
+                    season = "چهارفصل";
+                } else if (fn.includes('scarf') || fn.includes('شال') || fn.includes('روسری')) {
+                    category = "اکسسوری";
+                    name = `شال ${color}`;
+                    season = "پاییز و زمستان";
+                } else if (fn.includes('pant') || fn.includes('jean') || fn.includes('trouser') || fn.includes('شلوار') || fn.includes('اسلش') || fn.includes('کتان')) {
                     category = "شلوار";
                     name = `شلوار ${color}`;
                     season = "چهارفصل";
-                } else if (fn.includes('shoe') || fn.includes('sneak') || fn.includes('boot') || fn.includes('کفش') || fn.includes('کتانی') || fn.includes('بوت')) {
+                } else if (fn.includes('shoe') || fn.includes('sneak') || fn.includes('boot') || fn.includes('کفش') || fn.includes('کتانی') || fn.includes('بوت') || fn.includes('نیم‌بوت')) {
                     category = "کفش";
                     name = `کتانی یا کفش ${color}`;
                     season = "چهارفصل";
-                } else if (fn.includes('hoodie') || fn.includes('هودی')) {
+                } else if (fn.includes('hoodie') || fn.includes('سویشرت') || fn.includes('هودی')) {
                     category = "هودی";
                     name = `هودی ${color}`;
                     season = "پاییز و زمستان";
-                } else if (fn.includes('sweater') || fn.includes('knit') || fn.includes('بافت') || fn.includes('پلیور')) {
+                } else if (fn.includes('sweater') || fn.includes('knit') || fn.includes('بافت') || fn.includes('پلیور') || fn.includes('دورس')) {
                     category = "پلیور";
                     name = `پلیور بافت ${color}`;
                     season = "پاییز و زمستان";
-                } else if (fn.includes('shirt') || fn.includes('پیراهن') || fn.includes('تیشرت')) {
+                } else if (fn.includes('shirt') || fn.includes('tshirt') || fn.includes('تیشرت') || fn.includes('پیراهن')) {
                     category = "پیراهن";
                     name = `پیراهن ${color}`;
                     season = "بهار و تابستان";
-                } else if (fn.includes('jacket') || fn.includes('coat') || fn.includes('کاپشن') || fn.includes('پالتو')) {
+                } else if (fn.includes('jacket') || fn.includes('coat') || fn.includes('کاپشن') || fn.includes('پالتو') || fn.includes('بارانی') || fn.includes('پافر')) {
                     category = "کاپشن";
                     name = `کاپشن یا بارانی ${color}`;
                     season = "پاییز و زمستان";
                 } else {
-                    if (ratio > 1.35) {
+                    // Geometry-based fallback when filename has no descriptive words
+                    if (ratio > 1.45) {
                         category = "شلوار";
-                        name = `شلوار ${color}`;
+                        name = `شلوار راسته ${color}`;
                         season = "چهارفصل";
-                    } else if (ratio < 0.75) {
+                    } else if (ratio < 0.72) {
                         category = "کفش";
                         name = `کفش یا کتانی ${color}`;
                         season = "چهارفصل";
-                    } else if (ratio > 1.1) {
+                    } else if (ratio >= 0.85 && ratio <= 1.2) {
+                        // Square shaped photo is typical for watches, accessories, hats, or folded garments
+                        category = "اکسسوری";
+                        name = `ساعت مچی یا اکسسوری ${color}`;
+                        season = "چهارفصل";
+                    } else if (ratio > 1.2) {
                         category = "کاپشن";
                         name = `کاپشن ${color}`;
                         season = "پاییز و زمستان";
@@ -2471,17 +2535,17 @@ function setupPhotoUpload() {
                 const item = items[0];
                 state.detectedImageUrl = item.image_url || null;
                 DOM.detectedName.value = item.name || '';
-                DOM.detectedCategory.value = item.category || 'کاپشن';
+                DOM.detectedCategory.value = item.category || 'اکسسوری';
                 DOM.detectedColor.value = item.color || '';
-                DOM.detectedSeason.value = item.season || 'پاییز و زمستان';
+                DOM.detectedSeason.value = item.season || 'چهارفصل';
 
                 DOM.detectionBadge.textContent = result.gemini_used 
-                    ? '✨ شناسایی شده توسط Gemini Vision'
-                    : '📷 استخراج رنگ و ویژگی‌های تصویر در مرورگر';
+                    ? '✨ شناسایی دقیق با هوش مصنوعی بینایی Gemini'
+                    : '📷 تحلیل محلی ویژگی‌های تصویر در مرورگر';
                 
                 DOM.detectionNote.textContent = result.gemini_used
-                    ? 'هوش مصنوعی بینایی با دقت بالا لباس را تحلیل کرد.'
-                    : 'لباس با موفقیت پردازش شد و آماده ثبت در کمد است.';
+                    ? 'هوش مصنوعی بینایی Google Gemini با دقت بالا این آیتم را تشخیص داد.'
+                    : 'در صورت نیاز می‌توانید نام و دسته‌بندی بالا را پیش از ثبت در کمد ویرایش نمایید.';
 
                 DOM.detectionResultBox.style.display = 'block';
                 DOM.detectionResultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
