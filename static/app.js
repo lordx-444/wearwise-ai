@@ -361,6 +361,7 @@ const DOM = {
 
     // Wardrobe Management
     totalWardrobeItems: document.getElementById('totalWardrobeItems'),
+    cleanAllBgBtn: document.getElementById('cleanAllBgBtn'),
     modeVisionBtn: document.getElementById('modeVisionBtn'),
     modeBulkUploadBtn: document.getElementById('modeBulkUploadBtn'),
     modeBulkTextBtn: document.getElementById('modeBulkTextBtn'),
@@ -463,6 +464,8 @@ const DOM = {
     exportBackupBtn: document.getElementById('exportBackupBtn'),
     importBackupBtn: document.getElementById('importBackupBtn'),
     importBackupFile: document.getElementById('importBackupFile'),
+    copySyncCodeBtn: document.getElementById('copySyncCodeBtn'),
+    pasteSyncCodeBtn: document.getElementById('pasteSyncCodeBtn'),
 
     // Loading & Toast
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -784,6 +787,256 @@ function saveLocalHistory(rec) {
     };
     history.unshift(item);
     localStorage.setItem('wearwise_history_items', JSON.stringify(history.slice(0, 50)));
+}
+
+// ============================================================
+// Canvas-Based Client-Side Background Removal (Flood-Fill BFS)
+// ============================================================
+async function removeBackgroundFromDataUrl(dataUrl) {
+    return new Promise((resolve) => {
+        if (!dataUrl || typeof dataUrl !== 'string') return resolve(dataUrl);
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                const w = img.width;
+                const h = img.height;
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const data = imgData.data;
+
+                // 1. Sample border pixels across all 4 boundaries
+                const borderSamples = [];
+                const stepX = Math.max(1, Math.floor(w / 35));
+                const stepY = Math.max(1, Math.floor(h / 35));
+
+                for (let x = 0; x < w; x += stepX) {
+                    const topIdx = (0 * w + x) * 4;
+                    borderSamples.push([data[topIdx], data[topIdx + 1], data[topIdx + 2]]);
+                    const botIdx = ((h - 1) * w + x) * 4;
+                    borderSamples.push([data[botIdx], data[botIdx + 1], data[botIdx + 2]]);
+                }
+                for (let y = 0; y < h; y += stepY) {
+                    const leftIdx = (y * w + 0) * 4;
+                    borderSamples.push([data[leftIdx], data[leftIdx + 1], data[leftIdx + 2]]);
+                    const rightIdx = (y * w + (w - 1)) * 4;
+                    borderSamples.push([data[rightIdx], data[rightIdx + 1], data[rightIdx + 2]]);
+                }
+
+                if (borderSamples.length === 0) return resolve(dataUrl);
+
+                let avgR = 0, avgG = 0, avgB = 0;
+                for (const s of borderSamples) {
+                    avgR += s[0];
+                    avgG += s[1];
+                    avgB += s[2];
+                }
+                avgR /= borderSamples.length;
+                avgG /= borderSamples.length;
+                avgB /= borderSamples.length;
+
+                // Perceptual color difference
+                function colorDiff(r, g, b, tr, tg, tb) {
+                    const dr = r - tr;
+                    const dg = g - tg;
+                    const db = b - tb;
+                    return Math.sqrt(0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db);
+                }
+
+                let maxBorderDist = 0;
+                for (const s of borderSamples) {
+                    const dist = colorDiff(s[0], s[1], s[2], avgR, avgG, avgB);
+                    if (dist > maxBorderDist) maxBorderDist = dist;
+                }
+                const threshold = Math.max(30, Math.min(80, maxBorderDist * 1.35 + 22));
+
+                // 2. BFS Flood Fill from outer border
+                const visited = new Uint8Array(w * h);
+                const queue = new Int32Array(w * h);
+                let qHead = 0;
+                let qTail = 0;
+
+                function checkAndEnqueue(x, y) {
+                    const pos = y * w + x;
+                    if (visited[pos]) return;
+                    const idx = pos * 4;
+                    const r = data[idx];
+                    const g = data[idx + 1];
+                    const b = data[idx + 2];
+                    if (colorDiff(r, g, b, avgR, avgG, avgB) <= threshold) {
+                        visited[pos] = 1;
+                        queue[qTail++] = pos;
+                    }
+                }
+
+                for (let x = 0; x < w; x++) {
+                    checkAndEnqueue(x, 0);
+                    checkAndEnqueue(x, h - 1);
+                }
+                for (let y = 0; y < h; y++) {
+                    checkAndEnqueue(0, y);
+                    checkAndEnqueue(w - 1, y);
+                }
+
+                while (qHead < qTail) {
+                    const curr = queue[qHead++];
+                    const cx = curr % w;
+                    const cy = Math.floor(curr / w);
+
+                    const neighbors = [
+                        cx > 0 ? curr - 1 : -1,
+                        cx < w - 1 ? curr + 1 : -1,
+                        cy > 0 ? curr - w : -1,
+                        cy < h - 1 ? curr + w : -1
+                    ];
+
+                    for (let n = 0; n < 4; n++) {
+                        const nPos = neighbors[n];
+                        if (nPos === -1 || visited[nPos]) continue;
+                        const idx = nPos * 4;
+                        const r = data[idx];
+                        const g = data[idx + 1];
+                        const b = data[idx + 2];
+                        if (colorDiff(r, g, b, avgR, avgG, avgB) <= threshold) {
+                            visited[nPos] = 1;
+                            queue[qTail++] = nPos;
+                        }
+                    }
+                }
+
+                // Make background pixels transparent
+                for (let p = 0; p < w * h; p++) {
+                    if (visited[p]) {
+                        data[p * 4 + 3] = 0;
+                    }
+                }
+
+                // Smooth edge feathering
+                for (let y = 1; y < h - 1; y++) {
+                    for (let x = 1; x < w - 1; x++) {
+                        const pos = y * w + x;
+                        if (!visited[pos]) {
+                            if (visited[pos - 1] || visited[pos + 1] || visited[pos - w] || visited[pos + w]) {
+                                const idx = pos * 4;
+                                const diff = colorDiff(data[idx], data[idx + 1], data[idx + 2], avgR, avgG, avgB);
+                                if (diff < threshold * 1.35) {
+                                    const factor = Math.max(0.18, (diff - threshold) / (threshold * 0.35));
+                                    data[idx + 3] = Math.round(data[idx + 3] * factor);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ctx.putImageData(imgData, 0, 0);
+                const transparentPng = canvas.toDataURL('image/png');
+                resolve(transparentPng);
+            } catch (err) {
+                console.warn('removeBackgroundFromDataUrl error:', err);
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
+async function cleanAllWardrobeBackgrounds() {
+    if (!state.wardrobe || state.wardrobe.length === 0) {
+        showToast('هیچ لباسی در کمد شما برای حذف پس‌زمینه وجود ندارد.', 'warning');
+        return;
+    }
+
+    showLoading('در حال حذف پس‌زمینه تمام عکس‌های کمد...', 'جداسازی هوشمند لباس‌ها از پس‌زمینه با الگوریتم شفاف‌ساز');
+
+    let cleanedCount = 0;
+    try {
+        for (let i = 0; i < state.wardrobe.length; i++) {
+            const item = state.wardrobe[i];
+            const currentImg = item.image_url;
+            if (currentImg && (currentImg.startsWith('data:image/') || currentImg.startsWith('http') || currentImg.startsWith('/static/'))) {
+                try {
+                    const noBgUrl = await removeBackgroundFromDataUrl(currentImg);
+                    if (noBgUrl && noBgUrl !== currentImg) {
+                        item.image_url = noBgUrl;
+                        cleanedCount++;
+                    }
+                } catch (e) {
+                    console.warn(`Could not clean background for ${item.name}:`, e);
+                }
+            }
+        }
+
+        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(state.wardrobe));
+        renderWardrobe();
+        hideLoading();
+        showToast(`✨ پس‌زمینه ${cleanedCount} لباس در کمد با موفقیت حذف و شفاف شد!`, 'success');
+        triggerAutoSync();
+    } catch (err) {
+        hideLoading();
+        showToast('خطا در فرآیند حذف پس‌زمینه: ' + err.message, 'error');
+    }
+}
+window.cleanAllWardrobeBackgrounds = cleanAllWardrobeBackgrounds;
+
+// ============================================================
+// Intelligent Wardrobe Fuzzy Matching Function
+// ============================================================
+function findMatchingWardrobeItem(itemName, wardrobeList) {
+    if (!itemName || !Array.isArray(wardrobeList) || wardrobeList.length === 0) return null;
+    const cleanStr = (s) => (s || '').trim().toLowerCase().replace(/[،\-–—_().]/g, ' ');
+    const target = cleanStr(itemName);
+    const targetWords = target.split(/\s+/).filter(w => w.length > 1);
+
+    // 1. Direct equality or substring
+    for (const w of wardrobeList) {
+        if (!w || !w.name) continue;
+        const wn = cleanStr(w.name);
+        if (wn === target || wn.includes(target) || target.includes(wn)) {
+            return w;
+        }
+    }
+
+    // 2. Garment type & keyword overlap scoring
+    const garmentTypes = ['تیشرت', 'پیراهن', 'شلوار', 'کاپشن', 'پالتو', 'بارانی', 'هودی', 'پلیور', 'بافت', 'دورس', 'کتانی', 'کفش', 'بوت', 'نیم‌بوت', 'صندل', 'ساعت', 'عینک', 'کلاه', 'شال', 'کیف', 'کمربند', 'جلیقه', 'کت'];
+    
+    let bestMatch = null;
+    let highestScore = 0;
+
+    for (const w of wardrobeList) {
+        if (!w || !w.name) continue;
+        const wn = cleanStr(w.name);
+        const wCategory = cleanStr(w.category || '');
+        const wWords = wn.split(/\s+/).filter(x => x.length > 1);
+
+        let score = 0;
+        // Check if both share the garment type keyword
+        for (const type of garmentTypes) {
+            if (target.includes(type) && (wn.includes(type) || wCategory.includes(type))) {
+                score += 6;
+                break;
+            }
+        }
+
+        // Count overlapping words
+        for (const tw of targetWords) {
+            if (wWords.includes(tw)) {
+                score += 2;
+            }
+        }
+
+        if (score > highestScore && score >= 5) {
+            highestScore = score;
+            bestMatch = w;
+        }
+    }
+
+    return bestMatch;
 }
 
 function generateClientSideRecommendations() {
@@ -1488,17 +1741,12 @@ function renderRecommendations(data) {
         // High quality mannequin display image
         const outfitImg = getMannequinOutfitImage(outfit, state.style, index);
 
-        // Build Pieces Breakdown with photos
+        // Build Pieces Breakdown with photos & isolated cutouts
         const pieces = outfit.pieces || (outfit.items || []).map(itemName => {
-            const matchedW = state.wardrobe.find(w => {
-                if (!w || !w.name) return false;
-                const wn = w.name.trim().toLowerCase();
-                const iname = itemName.trim().toLowerCase();
-                return wn === iname || iname.includes(wn) || wn.includes(iname);
-            });
+            const matchedW = findMatchingWardrobeItem(itemName, state.wardrobe);
             const isWardrobe = (outfit.from_wardrobe || []).includes(itemName) || Boolean(matchedW);
             return {
-                name: itemName,
+                name: matchedW ? matchedW.name : itemName,
                 is_wardrobe: isWardrobe,
                 image_url: matchedW?.image_url || getGarmentFallbackImage(itemName)
             };
@@ -1995,8 +2243,9 @@ function getSyncPayload() {
     const currentWardrobe = (state.wardrobe && state.wardrobe.length > 0) ? state.wardrobe : getLocalWardrobe();
     return {
         sync_id: getSyncKey(),
+        gemini_api_key: localStorage.getItem('wearwise_gemini_key') || '',
         wardrobe: currentWardrobe,
-        profile: state.profile,
+        profile: state.profile || { gender: 'unisex', age_group: 'young_adult', fit_pref: 'regular', temp_sensitivity: 'normal' },
         settings: {
             theme: state.theme,
             lang: state.lang,
@@ -2014,7 +2263,14 @@ async function applySyncedData(payload, showSuccessToast = true) {
         throw new Error('فرمت داده‌های دریافتی نامعتبر است.');
     }
 
-    // 1. Wardrobe Items
+    // 0. Restore Gemini API Key
+    if (payload.gemini_api_key && typeof payload.gemini_api_key === 'string' && payload.gemini_api_key.trim().length > 5) {
+        localStorage.setItem('wearwise_gemini_key', payload.gemini_api_key.trim());
+        state.geminiConfigured = true;
+        checkApiStatus();
+    }
+
+    // 1. Wardrobe Items (with photos)
     if (Array.isArray(payload.wardrobe) && payload.wardrobe.length > 0) {
         state.wardrobe = payload.wardrobe;
         localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(payload.wardrobe));
@@ -2029,7 +2285,7 @@ async function applySyncedData(payload, showSuccessToast = true) {
         updateProfileButtonLabel();
     }
 
-    // 3. Settings (Theme, Lang, etc.)
+    // 3. Settings (Theme, Lang, Destination, Style)
     if (payload.settings && typeof payload.settings === 'object') {
         if (payload.settings.theme && payload.settings.theme !== state.theme) {
             applyTheme(payload.settings.theme);
@@ -2044,6 +2300,10 @@ async function applySyncedData(payload, showSuccessToast = true) {
         if (payload.settings.style) {
             state.style = payload.settings.style;
             if (DOM.styleSelect) DOM.styleSelect.value = state.style;
+        }
+        if (typeof payload.settings.useWardrobe === 'boolean') {
+            state.useWardrobe = payload.settings.useWardrobe;
+            if (DOM.wardrobeToggle) DOM.wardrobeToggle.checked = state.useWardrobe;
         }
     }
 
@@ -2065,7 +2325,7 @@ async function applySyncedData(payload, showSuccessToast = true) {
 
     if (showSuccessToast) {
         const count = (payload.wardrobe && payload.wardrobe.length) || 0;
-        showToast(`✅ همگام‌سازی موفق: ${count} لباس و تنظیمات به‌روزرسانی شد.`, 'success');
+        showToast(`✨ همگام‌سازی موفق: ${count} لباس، عکس‌ها، کلید API و تنظیمات به‌روزرسانی شدند.`, 'success');
     }
 }
 
@@ -2137,7 +2397,11 @@ async function pushToCloud(silent = false) {
             if (kvRes.ok) {
                 const kvData = await kvRes.json();
                 if (kvData && kvData.id) {
-                    localStorage.setItem(`wearwise_cloud_obj_${syncKey}`, kvData.id);
+                    const cloudId = kvData.id;
+                    localStorage.setItem(`wearwise_cloud_obj_${syncKey}`, cloudId);
+                    localStorage.setItem(`wearwise_cloud_obj_${cloudId}`, cloudId);
+                    setSyncKey(cloudId);
+                    if (DOM.syncKeyInput) DOM.syncKeyInput.value = cloudId;
                 }
             }
         }
@@ -2200,25 +2464,13 @@ async function pullFromCloud(customKey = null, silent = false) {
     // 2. Check public cloud storage
     if (!payload) {
         try {
-            const storedObjectId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`);
-            if (storedObjectId) {
-                const res = await fetch(`${PUBLIC_KV_ENDPOINT}/${storedObjectId}`);
+            const queryId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`) || syncKey;
+            if (queryId) {
+                const res = await fetch(`${PUBLIC_KV_ENDPOINT}/${encodeURIComponent(queryId)}`);
                 if (res.ok) {
                     const kvObj = await res.json();
                     if (kvObj && kvObj.data && kvObj.data.wardrobe) {
                         payload = kvObj.data;
-                    }
-                }
-            }
-            if (!payload) {
-                const resAll = await fetch(PUBLIC_KV_ENDPOINT);
-                if (resAll.ok) {
-                    const allList = await resAll.json();
-                    const targetName = `wearwise_${syncKey}`;
-                    const found = allList.find(item => item.name === targetName);
-                    if (found && found.data && found.data.wardrobe) {
-                        payload = found.data;
-                        localStorage.setItem(`wearwise_cloud_obj_${syncKey}`, found.id);
                     }
                 }
             }
@@ -2392,6 +2644,66 @@ function setupSyncModal() {
         });
     }
 
+    // Quick Sync Code (Copy/Paste text)
+    if (DOM.copySyncCodeBtn) {
+        DOM.copySyncCodeBtn.addEventListener('click', () => {
+            try {
+                const payload = getSyncPayload();
+                const jsonStr = JSON.stringify(payload);
+                const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+                    return String.fromCharCode('0x' + p1);
+                }));
+                const quickCode = `WEARWISE:${b64}`;
+
+                navigator.clipboard.writeText(quickCode).then(() => {
+                    showToast('📋 کُد سریع انتقال با موفقیت کپی شد! می‌توانید آن را در پیام‌رسان بفرستید.', 'success');
+                }).catch(() => {
+                    prompt('کُد انتقال کمد شما (کپی کنید):', quickCode);
+                });
+            } catch (err) {
+                showToast('خطا در تولید کُد انتقال: ' + err.message, 'error');
+            }
+        });
+    }
+
+    if (DOM.pasteSyncCodeBtn) {
+        DOM.pasteSyncCodeBtn.addEventListener('click', async () => {
+            const codeInput = prompt('لطفاً کُد سریع انتقال را در این کادر جای‌گذاری (Paste) کنید:');
+            if (!codeInput || !codeInput.trim()) return;
+
+            try {
+                let rawCode = codeInput.trim();
+                let jsonText = '';
+                if (rawCode.startsWith('WEARWISE:')) {
+                    const b64 = rawCode.substring(9).trim();
+                    const decoded = decodeURIComponent(Array.prototype.map.call(atob(b64), (c) => {
+                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                    }).join(''));
+                    jsonText = decoded;
+                } else if (rawCode.startsWith('{')) {
+                    jsonText = rawCode;
+                } else {
+                    throw new Error('فرمت کُد انتقال نامعتبر است.');
+                }
+
+                const parsed = JSON.parse(jsonText);
+                if (!parsed || !parsed.wardrobe) {
+                    throw new Error('کُد فاقد اطلاعات معتبر کمد است.');
+                }
+
+                await applySyncedData(parsed, true);
+                if (parsed.sync_id && DOM.syncKeyInput) {
+                    DOM.syncKeyInput.value = parsed.sync_id;
+                    setSyncKey(parsed.sync_id);
+                    updateSyncQrCode();
+                }
+                showToast('🎉 تمام لباس‌ها، تصاویر، کلید API و تنظیمات با موفقیت منتقل شدند!', 'success');
+            } catch (err) {
+                showToast('خطا در اعمال کُد انتقال: ' + err.message, 'error');
+            }
+        });
+    }
+
     // Auto-Sync Toggle
     if (autoSyncCheckbox) {
         const autoSyncStored = localStorage.getItem('wearwise_autosync') !== 'false';
@@ -2524,6 +2836,14 @@ async function processImageLocally(file) {
                 ctx.drawImage(img, 0, 0, w, h);
                 const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
 
+                // Automatically remove background for crystal-clear isolated clothing item
+                let cleanDataUrl = compressedDataUrl;
+                try {
+                    cleanDataUrl = await removeBackgroundFromDataUrl(compressedDataUrl);
+                } catch (bgErr) {
+                    console.warn('Auto background removal note:', bgErr);
+                }
+
                 // 1. Try Gemini Vision if API key is stored
                 const apiKey = localStorage.getItem('wearwise_gemini_key');
                 if (apiKey && apiKey.trim().length > 10) {
@@ -2532,7 +2852,7 @@ async function processImageLocally(file) {
                         const geminiRes = await callGeminiVisionClientSide(apiKey.trim(), base64Data, 'image/jpeg');
                         if (geminiRes && geminiRes.name) {
                             return resolve({
-                                dataUrl: compressedDataUrl,
+                                dataUrl: cleanDataUrl,
                                 name: geminiRes.name,
                                 category: geminiRes.category || 'اکسسوری',
                                 color: geminiRes.color || 'مشکی',
@@ -2677,7 +2997,7 @@ async function processImageLocally(file) {
                 }
 
                 resolve({
-                    dataUrl: compressedDataUrl,
+                    dataUrl: cleanDataUrl,
                     name,
                     category,
                     color,
@@ -2732,6 +3052,10 @@ function setupPhotoUpload() {
         e.stopPropagation();
         resetPhotoUpload();
     });
+
+    if (DOM.cleanAllBgBtn) {
+        DOM.cleanAllBgBtn.addEventListener('click', cleanAllWardrobeBackgrounds);
+    }
 
     confirmUploadBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
