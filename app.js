@@ -1652,34 +1652,51 @@ function setupProfileModal() {
 // Settings & API Key Service
 // -------------------------------------------------------------
 async function checkApiStatus() {
-    try {
-        const res = await fetch('/api/settings/status');
-        if (!res.ok) return;
-        const data = await res.json();
-        state.geminiConfigured = data.gemini_configured;
-        if (state.geminiConfigured) {
-            DOM.apiStatusDot.className = 'status-dot active';
-            DOM.apiStatusText.textContent = 'Gemini فعال';
-            DOM.apiKeyBtn.title = 'کلید Google Gemini فعال و متصل است';
-        } else {
-            DOM.apiStatusDot.className = 'status-dot';
-            DOM.apiStatusText.textContent = 'تنظیم هوش مصنوعی';
-            DOM.apiKeyBtn.title = 'کلید Gemini تنظیم نشده است';
-        }
-    } catch (e) {
-        console.warn('Could not check API status:', e);
+    // 1. Check local browser storage (works on GitHub Pages & offline)
+    const localKey = localStorage.getItem('wearwise_gemini_key');
+    if (localKey && localKey.trim().length > 10) {
+        state.geminiConfigured = true;
+        if (DOM.apiStatusDot) DOM.apiStatusDot.className = 'status-dot active';
+        if (DOM.apiStatusText) DOM.apiStatusText.textContent = 'Gemini فعال';
+        if (DOM.apiKeyBtn) DOM.apiKeyBtn.title = 'کلید Google Gemini فعال و متصل است';
+        return;
     }
+
+    // 2. If running with Python backend, check server status
+    if (!isStaticHost()) {
+        try {
+            const res = await fetch('/api/settings/status');
+            if (res.ok) {
+                const data = await res.json();
+                state.geminiConfigured = data.gemini_configured;
+                if (state.geminiConfigured) {
+                    if (DOM.apiStatusDot) DOM.apiStatusDot.className = 'status-dot active';
+                    if (DOM.apiStatusText) DOM.apiStatusText.textContent = 'Gemini فعال';
+                    if (DOM.apiKeyBtn) DOM.apiKeyBtn.title = 'کلید Google Gemini فعال و متصل است';
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('Could not check backend API status:', e);
+        }
+    }
+
+    state.geminiConfigured = false;
+    if (DOM.apiStatusDot) DOM.apiStatusDot.className = 'status-dot';
+    if (DOM.apiStatusText) DOM.apiStatusText.textContent = 'تنظیم هوش مصنوعی';
+    if (DOM.apiKeyBtn) DOM.apiKeyBtn.title = 'کلید Gemini تنظیم نشده است';
 }
 
 function setupApiKeyModal() {
     DOM.apiKeyBtn.addEventListener('click', () => {
         DOM.apiKeyModal.style.display = 'flex';
+        const storedKey = localStorage.getItem('wearwise_gemini_key') || '';
+        DOM.apiKeyInput.value = storedKey;
         DOM.apiKeyInput.focus();
     });
 
     const closeModal = () => {
         DOM.apiKeyModal.style.display = 'none';
-        DOM.apiKeyInput.value = '';
     };
 
     DOM.closeApiKeyModal.addEventListener('click', closeModal);
@@ -1694,21 +1711,39 @@ function setupApiKeyModal() {
 
         showLoading('در حال ذخیره و اعتبارسنجی کلید API...', 'ارتباط با موتور Google Gemini');
         try {
-            const res = await fetch('/api/settings/api-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_key: key })
-            });
+            // Always save to browser localStorage for GitHub Pages & cross-device sync
+            localStorage.setItem('wearwise_gemini_key', key);
+            state.geminiConfigured = true;
 
-            if (!res.ok) {
-                const errData = await res.json().catch(() => ({}));
-                throw new Error(extractApiErrorMessage(errData, 'خطا در ثبت کلید'));
+            // If backend is reachable, also save to backend
+            if (!isStaticHost()) {
+                try {
+                    await fetch('/api/settings/api-key', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ api_key: key })
+                    });
+                } catch (bErr) {
+                    console.warn('Backend API key save note:', bErr);
+                }
             }
 
-            const data = await res.json();
-            showToast(data.message || 'کلید API با موفقیت ثبت شد!', 'success');
+            // Quick live check with Google Gemini API directly
+            try {
+                const testUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
+                const testRes = await fetch(testUrl);
+                if (testRes.ok) {
+                    showToast('✨ کلید API با موفقیت متصل و فعال شد!', 'success');
+                } else {
+                    showToast('کلید در حافظه مرورگر ذخیره شد (در صورت خطای شبکه یا تحریم، DNS بررسی شود).', 'warning');
+                }
+            } catch (_) {
+                showToast('کلید در حافظه مرورگر شما با موفقیت ذخیره شد!', 'success');
+            }
+
             closeModal();
-            checkApiStatus();
+            await checkApiStatus();
+            triggerAutoSync();
         } catch (err) {
             showToast(err.message, 'error');
         } finally {
