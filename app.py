@@ -1406,6 +1406,7 @@ def generate_fallback_recommendations(
         weather_level = "گرم و مطبوع" if language == "fa" else "Warm & Pleasant"
 
     umbrella_needed = rain_alert or (precip > 0.2)
+    is_cold = (effective_temp < 15)
 
     # Gender-specific piece suggestions
     is_female = (gender == "female")
@@ -1461,46 +1462,85 @@ def generate_fallback_recommendations(
     outfit_2_name = f"ست ۲: لایه‌بندی شیک {weather_level}" if language == "fa" else f"Outfit 2: Elegant Layering"
     outfit_3_name = f"ست ۳: ترکیب آزاد و مدرن" if language == "fa" else f"Outfit 3: Modern Casual Fusion"
 
-    outfits = [
-        {
-            "name": outfit_1_name,
-            "items": [
-                w for w in wardrobe_names if any(k in w for k in ["شلوار", "کاپشن", "پیراهن"])
-            ][:2] + ([jacket_item, "شلوار کتان راسته", "کتانی راحت"] if not wardrobe_names else ["کفش متناسب", "اکسسوری"]),
-            "from_wardrobe": [
-                w for w in wardrobe_names if any(k in w for k in ["شلوار", "کاپشن", "پیراهن"])
-            ][:2],
-            "general_suggestions": [jacket_item, "شلوار کتان راسته", "کتانی راحت"],
-            "time_of_day": "صبح تا بعدازظهر" if language == "fa" else "Morning to Afternoon",
-            "why": f"انتخابی کاربردی برای حضور در {dest_label} با حفظ آراستگی و هماهنگی کامل با آب‌وهوا.",
-            "image_query": f"{gender} professional {style.lower()} outfit for {dest_label} styled on fashion mannequin boutique display"
-        },
-        {
-            "name": outfit_2_name,
-            "items": [
-                w for w in wardrobe_names if any(k in w for k in ["پالتو", "هودی", "شلوار"])
-            ][:2] + ([coat_item, "شلوار جین تیره", "نیم‌بوت چرمی"] if not wardrobe_names else ["شال هماهنگ", "نیم‌بوت"]),
-            "from_wardrobe": [
-                w for w in wardrobe_names if any(k in w for k in ["پالتو", "هودی", "شلوار"])
-            ][:2],
-            "general_suggestions": [coat_item, "شلوار جین تیره", "نیم‌بوت چرمی"],
-            "time_of_day": "عصر و شب" if language == "fa" else "Evening & Night",
-            "why": "طراحی لایه‌ای برای ساعات خنک‌تر و حفظ دمای ایده‌آل با ظاهری بسیار برازنده.",
-            "image_query": f"{gender} elegant {style.lower()} coat outfit {dest_label} dressed on tailor mannequin dummy atelier"
-        },
-        {
-            "name": outfit_3_name,
-            "items": [
-                w for w in wardrobe_names if any(k in w for k in ["تیشرت", "کتانی", "شال"])
-            ][:2] + ([mid_item, "شلوار اسلش شیک", "کلاه کپ یا بافتنی"] if not wardrobe_names else ["ساعت اسپرت", "کلاه"]),
-            "from_wardrobe": [
-                w for w in wardrobe_names if any(k in w for k in ["تیشرت", "کتانی", "شال"])
-            ][:2],
-            "general_suggestions": [mid_item, "شلوار اسلش شیک", "کلاه متناسب"],
-            "time_of_day": "تمام ساعات روز" if language == "fa" else "All-Day Versatile",
-            "why": "ترکیبی منعطف و پرانرژی با آزادی حرکت بالا متناسب با سلیقه شما.",
-            "image_query": f"{gender} trendy urban streetwear {style.lower()} set displayed on boutique dress form mannequin"
+    # Group wardrobe by category to maximize actual wardrobe usage
+    tops = [w for w in wardrobe_names if any(k in w for k in ["تیشرت", "پیراهن", "هودی", "پلیور", "بافت", "دورس", "تاپ"])]
+    bottoms = [w for w in wardrobe_names if any(k in w for k in ["شلوار", "جین", "کتان", "اسلش", "دامن"])]
+    outer = [w for w in wardrobe_names if any(k in w for k in ["کاپشن", "پالتو", "بارانی", "پافر", "کت"])]
+    shoes = [w for w in wardrobe_names if any(k in w for k in ["کفش", "کتانی", "بوت", "نیم‌بوت"])]
+    accessories = [w for w in wardrobe_names if any(k in w for k in ["ساعت", "عینک", "کلاه", "شال", "کیف", "کمربند"])]
+
+    def pick_item(arr, idx):
+        return arr[idx % len(arr)] if arr else None
+
+    def make_outfit(name, time_str, top_i, btm_i, out_i, shoe_i, acc_i, why_str, img_q):
+        from_w = []
+        gen_s = []
+
+        top = pick_item(tops, top_i)
+        if top: 
+            from_w.append(top)
+        else: 
+            gen_s.append("پیراهن کتان آکسفورد" if is_cold else "تیشرت نخی")
+
+        btm = pick_item(bottoms, btm_i)
+        if btm: 
+            from_w.append(btm)
+        else: 
+            gen_s.append("شلوار کتان راسته")
+
+        if is_cold or rain_alert or outer:
+            out_piece = pick_item(outer, out_i)
+            if out_piece: 
+                from_w.append(out_piece)
+            elif is_cold or rain_alert: 
+                gen_s.append(jacket_item)
+
+        shoe = pick_item(shoes, shoe_i)
+        if shoe: 
+            from_w.append(shoe)
+        else: 
+            gen_s.append("کتانی یا کفش راحت")
+
+        acc = pick_item(accessories, acc_i)
+        if acc: 
+            from_w.append(acc)
+
+        for w in wardrobe_names:
+            if w not in from_w and len(from_w) < 3:
+                from_w.append(w)
+
+        return {
+            "name": name,
+            "items": from_w + gen_s,
+            "from_wardrobe": from_w,
+            "general_suggestions": gen_s,
+            "time_of_day": time_str,
+            "why": why_str,
+            "image_query": img_q
         }
+
+    outfits = [
+        make_outfit(
+            outfit_1_name,
+            "صبح تا بعدازظهر" if language == "fa" else "Morning to Afternoon",
+            0, 0, 0, 0, 0,
+            f"انتخابی کاربردی برای حضور در {dest_label} چیده‌شده با اولویت قطعی لباس‌های کمد شما.",
+            f"{gender} professional {style.lower()} outfit for {dest_label} styled on fashion mannequin boutique display"
+        ),
+        make_outfit(
+            outfit_2_name,
+            "عصر و شب" if language == "fa" else "Evening & Night",
+            1, 1, 1, 1, 1,
+            "طراحی لایه‌ای برای ساعات خنک‌تر با استفاده از تنوع لباس‌های موجود در کمد شما.",
+            f"{gender} elegant {style.lower()} coat outfit {dest_label} dressed on tailor mannequin dummy atelier"
+        ),
+        make_outfit(
+            outfit_3_name,
+            "تمام ساعات روز" if language == "fa" else "All-Day Versatile",
+            2, 2, 2, 2, 2,
+            "ترکیبی راحت، پرانرژی و جذاب برگرفته از قطعات کمد شخصی شما.",
+            f"{gender} trendy urban streetwear {style.lower()} set displayed on boutique dress form mannequin"
+        )
     ]
 
     for o in outfits:
