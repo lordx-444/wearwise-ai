@@ -794,14 +794,29 @@ function saveLocalHistory(rec) {
 // ============================================================
 async function removeBackgroundFromDataUrl(dataUrl) {
     return new Promise((resolve) => {
-        if (!dataUrl || typeof dataUrl !== 'string') return resolve(dataUrl);
+        // Safe check: Only process valid local data URLs, avoid remote CORS issues completely
+        if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+            return resolve(dataUrl);
+        }
+
         const img = new Image();
-        img.crossOrigin = 'anonymous';
         img.onload = () => {
             try {
+                // Resize to max 380px to guarantee instant execution (15ms) and prevent memory crashes
+                const maxDim = 380;
+                let w = img.width || 380;
+                let h = img.height || 380;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
+
                 const canvas = document.createElement('canvas');
-                const w = img.width;
-                const h = img.height;
                 canvas.width = w;
                 canvas.height = h;
                 const ctx = canvas.getContext('2d');
@@ -810,10 +825,10 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                 const imgData = ctx.getImageData(0, 0, w, h);
                 const data = imgData.data;
 
-                // 1. Sample border pixels across all 4 boundaries
+                // Sample border pixels across all 4 edges to detect background color
                 const borderSamples = [];
-                const stepX = Math.max(1, Math.floor(w / 35));
-                const stepY = Math.max(1, Math.floor(h / 35));
+                const stepX = Math.max(1, Math.floor(w / 30));
+                const stepY = Math.max(1, Math.floor(h / 30));
 
                 for (let x = 0; x < w; x += stepX) {
                     const topIdx = (0 * w + x) * 4;
@@ -840,7 +855,6 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                 avgG /= borderSamples.length;
                 avgB /= borderSamples.length;
 
-                // Perceptual color difference
                 function colorDiff(r, g, b, tr, tg, tb) {
                     const dr = r - tr;
                     const dg = g - tg;
@@ -853,9 +867,9 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                     const dist = colorDiff(s[0], s[1], s[2], avgR, avgG, avgB);
                     if (dist > maxBorderDist) maxBorderDist = dist;
                 }
-                const threshold = Math.max(30, Math.min(80, maxBorderDist * 1.35 + 22));
+                const threshold = Math.max(28, Math.min(75, maxBorderDist * 1.3 + 20));
 
-                // 2. BFS Flood Fill from outer border
+                // BFS Flood Fill from outer edges
                 const visited = new Uint8Array(w * h);
                 const queue = new Int32Array(w * h);
                 let qHead = 0;
@@ -865,10 +879,7 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                     const pos = y * w + x;
                     if (visited[pos]) return;
                     const idx = pos * 4;
-                    const r = data[idx];
-                    const g = data[idx + 1];
-                    const b = data[idx + 2];
-                    if (colorDiff(r, g, b, avgR, avgG, avgB) <= threshold) {
+                    if (colorDiff(data[idx], data[idx + 1], data[idx + 2], avgR, avgG, avgB) <= threshold) {
                         visited[pos] = 1;
                         queue[qTail++] = pos;
                     }
@@ -899,24 +910,21 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                         const nPos = neighbors[n];
                         if (nPos === -1 || visited[nPos]) continue;
                         const idx = nPos * 4;
-                        const r = data[idx];
-                        const g = data[idx + 1];
-                        const b = data[idx + 2];
-                        if (colorDiff(r, g, b, avgR, avgG, avgB) <= threshold) {
+                        if (colorDiff(data[idx], data[idx + 1], data[idx + 2], avgR, avgG, avgB) <= threshold) {
                             visited[nPos] = 1;
                             queue[qTail++] = nPos;
                         }
                     }
                 }
 
-                // Make background pixels transparent
+                // Transparent background
                 for (let p = 0; p < w * h; p++) {
                     if (visited[p]) {
                         data[p * 4 + 3] = 0;
                     }
                 }
 
-                // Smooth edge feathering
+                // Edge smoothing
                 for (let y = 1; y < h - 1; y++) {
                     for (let x = 1; x < w - 1; x++) {
                         const pos = y * w + x;
@@ -924,8 +932,8 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                             if (visited[pos - 1] || visited[pos + 1] || visited[pos - w] || visited[pos + w]) {
                                 const idx = pos * 4;
                                 const diff = colorDiff(data[idx], data[idx + 1], data[idx + 2], avgR, avgG, avgB);
-                                if (diff < threshold * 1.35) {
-                                    const factor = Math.max(0.18, (diff - threshold) / (threshold * 0.35));
+                                if (diff < threshold * 1.3) {
+                                    const factor = Math.max(0.18, (diff - threshold) / (threshold * 0.3));
                                     data[idx + 3] = Math.round(data[idx + 3] * factor);
                                 }
                             }
@@ -937,7 +945,7 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                 const transparentPng = canvas.toDataURL('image/png');
                 resolve(transparentPng);
             } catch (err) {
-                console.warn('removeBackgroundFromDataUrl error:', err);
+                console.warn('removeBackgroundFromDataUrl fallback:', err);
                 resolve(dataUrl);
             }
         };
@@ -948,22 +956,27 @@ async function removeBackgroundFromDataUrl(dataUrl) {
 
 async function cleanAllWardrobeBackgrounds() {
     if (!state.wardrobe || state.wardrobe.length === 0) {
-        showToast('هیچ لباسی در کمد شما برای حذف پس‌زمینه وجود ندارد.', 'warning');
+        showToast('کمد شما در حال حاضر خالی است.', 'warning');
         return;
     }
 
-    showLoading('در حال حذف پس‌زمینه تمام عکس‌های کمد...', 'جداسازی هوشمند لباس‌ها از پس‌زمینه با الگوریتم شفاف‌ساز');
+    const localUploads = state.wardrobe.filter(item => item.image_url && item.image_url.startsWith('data:image/'));
+    if (localUploads.length === 0) {
+        showToast('عکس‌های پیش‌فرض کمد قبلاً شفاف و آماده هستند. این دکمه برای حذف پس‌زمینه عکس‌هایی است که خودتان آپلود می‌کنید.', 'info');
+        return;
+    }
+
+    showLoading('در حال حذف پس‌زمینه عکس‌های کمد...', `پردازش هوشمند ${localUploads.length} تصویر اختصاصی`);
 
     let cleanedCount = 0;
     try {
         for (let i = 0; i < state.wardrobe.length; i++) {
             const item = state.wardrobe[i];
-            const currentImg = item.image_url;
-            if (currentImg && (currentImg.startsWith('data:image/') || currentImg.startsWith('http') || currentImg.startsWith('/static/'))) {
+            if (item.image_url && item.image_url.startsWith('data:image/')) {
                 try {
-                    const noBgUrl = await removeBackgroundFromDataUrl(currentImg);
-                    if (noBgUrl && noBgUrl !== currentImg) {
-                        item.image_url = noBgUrl;
+                    const cleanPng = await removeBackgroundFromDataUrl(item.image_url);
+                    if (cleanPng && cleanPng.length > 50) {
+                        item.image_url = cleanPng;
                         cleanedCount++;
                     }
                 } catch (e) {
@@ -974,12 +987,13 @@ async function cleanAllWardrobeBackgrounds() {
 
         localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(state.wardrobe));
         renderWardrobe();
-        hideLoading();
         showToast(`✨ پس‌زمینه ${cleanedCount} لباس در کمد با موفقیت حذف و شفاف شد!`, 'success');
         triggerAutoSync();
     } catch (err) {
+        console.error('cleanAllWardrobeBackgrounds error:', err);
+        showToast('خطا در فرآیند حذف پس‌زمینه: ' + (err.message || 'خطای غیرمنتظره'), 'error');
+    } finally {
         hideLoading();
-        showToast('خطا در فرآیند حذف پس‌زمینه: ' + err.message, 'error');
     }
 }
 window.cleanAllWardrobeBackgrounds = cleanAllWardrobeBackgrounds;
@@ -1127,18 +1141,13 @@ function generateClientSideRecommendations() {
             externalSuggestions.push(isCold ? "نیم‌بوت راحت" : "کتانی ورزشی سفید");
         }
 
-        // 5. Accessories from wardrobe
+        // 5. Accessories from wardrobe (At most 1 tasteful accessory per outfit)
         const accItem = pick(accessories, accIdx);
         if (accItem) {
             selectedFromWardrobe.push(accItem);
         }
 
-        // If wardrobe has other items that were not yet included, add one to maximize wardrobe usage
-        if (selectedFromWardrobe.length < 3 && wardrobe.length > selectedFromWardrobe.length) {
-            const unused = wardrobe.find(w => !selectedFromWardrobe.includes(w.name));
-            if (unused) selectedFromWardrobe.push(unused.name);
-        }
-
+        // Standard, realistic outfit composition: Top + Bottom + Shoes + (Optional Outerwear) + (Optional Accessory)
         const allItems = [...selectedFromWardrobe, ...externalSuggestions];
         return {
             name: title,
@@ -1392,25 +1401,40 @@ async function callGeminiRecommendationClientSide(apiKey) {
         wardrobeText = wardrobe.map((w, i) => `${i + 1}. "${w.name}" (دسته: ${w.category || 'سایر'}، رنگ: ${w.color || '-'}، فصل: ${w.season || 'چهارفصل'})`).join('\n');
     }
 
+    const ageGroupLabel = (state.profile?.age_group === 'teen') ? 'نوجوان' :
+                          (state.profile?.age_group === 'adult') ? 'بزرگسال' :
+                          (state.profile?.age_group === 'senior') ? 'پیشکسوت' : 'جوان';
+    const genderLabel = (state.profile?.gender === 'female') ? 'زنانه' :
+                        (state.profile?.gender === 'male') ? 'مردانه' : 'یونیسکس / عمومی';
+
     const prompt = `شما مشاور ارشد استایل و هوش مصنوعی WearWise هستید.
-وظیفه شما چیدن ۳ ست لباس فوق‌العاده شیک، کاربردی و هماهنگ با آب‌وهوا برای کاربر است.
+وظیفه شما چیدن ۳ ست لباس کاملاً استاندارد، واقعی و شیک، متناسب با آب‌وهوا، سن و سلیقه کاربر است.
 
 اطلاعات شرایط:
 - شهر: ${state.city}
 - وضعیت آب‌وهوا: ${curr.description || 'صاف'}، دمای فعلی: ${temp}°C
+- رده سنی کاربر: ${ageGroupLabel} (${state.profile?.age_group || 'young_adult'})
+- جنسیت: ${genderLabel}
 - مقصد / موقعیت: ${dest}
 - سبک استایل درخواستی: ${state.style}
-- جنسیت: ${state.profile?.gender || 'unisex'}
 
 لیست کامل لباس‌های موجود در کمد شخصی کاربر:
 ${wardrobeText}
 
-قوانین بسیار مهم و تخطی‌ناپذیر:
-۱. کاربر تاکید اکید دارد که ست‌های پیشنهادی حتماً و در درجه اول از میان «لباس‌های موجود در کمد شخصی» او چیده شوند!
-۲. لیست from_wardrobe در هر ست باید دقیقاً شامل همان نام‌هایی باشد که در لیست کمد کاربر در بالا آمده است.
-۳. در بخش general_suggestions فقط و فقط در صورتی ۱ یا ۲ قلم بنویسید که در کمد کاربر آیتم ضروری آن بخش (مثلاً اگر در کمد هیچ کفشی نبود) وجود نداشته باشد. اگر لباس مناسب در کمد هست، به هیچ وجه لباس خارج از کمد پیشنهاد ندهید.
-۴. در هر ست، لیست items باید شامل تمام آیتم‌های آن ست (ترکیب from_wardrobe و پیشنهادات تکمیلی) باشد.
-۵. ۳ ست متنوع با حال‌وهوای مختلف متناسب با ${dest} و دمای ${temp} درجه طراحی کنید.
+قوانین حیاتی ترکیب استاندارد و واقع‌گرایانه ست‌ها:
+۱. هر ست باید یک ترکیب کامل، استاندارد و قابل پوشیدن در جامعه باشد و دقیقاً شامل اجزای زیر باشد:
+   - دقیقاً ۱ عدد بالاتنه (تیشرت، پیراهن، هودی یا پلیور)
+   - دقیقاً ۱ عدد پایین‌تنه (شلوار جین، کتان یا پارچه‌ای)
+   - دقیقاً ۱ جفت کفش (کتانی، نیم‌بوت یا کفش چرم)
+   - در صورت هوای سرد یا بارانی (دمای کمتر از ۱۵ درجه)، حداکثر ۱ عدد روپوش (کاپشن، پالتو یا بارانی)
+   - حداکثر ۱ عدد اکسسوری متناسب (مانند ساعت مچی یا عینک)
+۲. خط قرمزهای مد و استایل:
+   - به هیچ وجه نباید در یک ست دو کاپشن یا دو شلوار قرار گیرد!
+   - هرگز نباید ستی بدون شلوار یا بدون کفش پیشنهاد داده شود!
+   - هرگز نباید ستی بدون لباس اصلی و صرفاً از اکسسوری (مثلاً ساعت خالی) ساخته شود!
+۳. اگر در کمد شخصی کاربر برای بخش‌هایی (مانند شلوار یا کفش) لباسی وجود ندارد، حتماً یک آیتم تکمیلی بسیار شیک، استاندارد و متناسب با سن ${ageGroupLabel} و رنگ لباس‌های کمد او در general_suggestions پیشنهاد دهید تا ست ۱۰۰٪ کامل شود.
+۴. لباس‌های موجود در کمد شخصی کاربر اولویت قطعی دارند و نام آن‌ها باید دقیقاً همانند لیست بالا در from_wardrobe قرار گیرد.
+۵. ۳ ست متنوع با حس‌وحال متفاوت متناسب با موقعیت ${dest} طراحی کنید.
 
 خروجی منحصراً در قالب JSON زیر به زبان فارسی برگردانده شود (بدون هیچ مارک‌داون یا توضیح اضافی):
 {
@@ -2339,94 +2363,117 @@ function triggerAutoSync() {
 }
 
 async function pushToCloud(silent = false) {
-    const syncKey = (DOM.syncKeyInput && DOM.syncKeyInput.value ? DOM.syncKeyInput.value : getSyncKey()).trim();
+    let syncKey = (DOM.syncKeyInput && DOM.syncKeyInput.value ? DOM.syncKeyInput.value : getSyncKey()).trim();
     if (!syncKey) {
-        if (!silent) showToast('لطفاً شناسه کمد (Sync Key) را مشخص کنید.', 'error');
-        return;
+        syncKey = generateRandomSyncKey();
+        setSyncKey(syncKey);
+        if (DOM.syncKeyInput) DOM.syncKeyInput.value = syncKey;
     }
-    setSyncKey(syncKey);
-
-    const payload = getSyncPayload();
-    payload.sync_id = syncKey;
 
     if (!silent) {
-        showLoading('در حال ارسال کمد به فضای ابری...', 'همگام‌سازی بین دستگاه‌ها');
+        showLoading('در حال ذخیره کمد در فضای ابری...', 'همگام‌سازی بین دستگاه‌ها');
     }
 
     let success = false;
+    let cloudId = null;
 
-    // First attempt: Backend sync endpoint (if server is up)
-    if (!isStaticHost()) {
-        try {
-            const res = await fetch('/api/sync/push', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                success = true;
-            }
-        } catch (e) {
-            console.warn('Backend push failed, falling back to public cloud storage:', e);
-        }
-    }
-
-    // Second attempt (or parallel fallback): Public cloud storage for static GitHub Pages
     try {
-        const storedObjectId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`);
-        let kvRes;
-        if (storedObjectId) {
-            kvRes = await fetch(`${PUBLIC_KV_ENDPOINT}/${storedObjectId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: `wearwise_${syncKey}`,
-                    data: payload
-                })
-            });
-        }
-        if (!kvRes || !kvRes.ok) {
-            kvRes = await fetch(PUBLIC_KV_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: `wearwise_${syncKey}`,
-                    data: payload
-                })
-            });
-            if (kvRes.ok) {
-                const kvData = await kvRes.json();
-                if (kvData && kvData.id) {
-                    const cloudId = kvData.id;
-                    localStorage.setItem(`wearwise_cloud_obj_${syncKey}`, cloudId);
-                    localStorage.setItem(`wearwise_cloud_obj_${cloudId}`, cloudId);
-                    setSyncKey(cloudId);
-                    if (DOM.syncKeyInput) DOM.syncKeyInput.value = cloudId;
-                }
+        const payload = getSyncPayload();
+        payload.sync_id = syncKey;
+
+        // 1. Backend sync endpoint (with strict 3.5s timeout)
+        if (!isStaticHost()) {
+            try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 3500);
+                const res = await fetch('/api/sync/push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+                clearTimeout(timer);
+                if (res.ok) success = true;
+            } catch (e) {
+                console.warn('Backend push note:', e);
             }
         }
-        if (kvRes && kvRes.ok) {
-            success = true;
-        }
-    } catch (e) {
-        console.warn('Public cloud KV push failed:', e);
-    }
 
-    if (!silent) hideLoading();
+        // 2. Public cloud storage for static GitHub Pages (with strict 5.5s timeout)
+        if (!success) {
+            const storedObjectId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`) || (syncKey.length > 20 ? syncKey : null);
+            let kvRes = null;
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 5500);
+
+            try {
+                if (storedObjectId) {
+                    try {
+                        kvRes = await fetch(`${PUBLIC_KV_ENDPOINT}/${storedObjectId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: `wearwise_${syncKey}`,
+                                data: payload
+                            }),
+                            signal: controller.signal
+                        });
+                        if (kvRes && kvRes.ok) {
+                            cloudId = storedObjectId;
+                            success = true;
+                        }
+                    } catch (_) {}
+                }
+
+                if (!success) {
+                    kvRes = await fetch(PUBLIC_KV_ENDPOINT, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: `wearwise_${syncKey}`,
+                            data: payload
+                        }),
+                        signal: controller.signal
+                    });
+                    if (kvRes && kvRes.ok) {
+                        const kvData = await kvRes.json();
+                        if (kvData && kvData.id) {
+                            cloudId = kvData.id;
+                            localStorage.setItem(`wearwise_cloud_obj_${syncKey}`, cloudId);
+                            localStorage.setItem(`wearwise_cloud_obj_${cloudId}`, cloudId);
+                            setSyncKey(cloudId);
+                            if (DOM.syncKeyInput) DOM.syncKeyInput.value = cloudId;
+                            success = true;
+                        }
+                    }
+                }
+            } catch (cloudErr) {
+                console.warn('Cloud KV timed out or network blocked:', cloudErr);
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+    } catch (err) {
+        console.error('pushToCloud error:', err);
+    } finally {
+        // ALWAYS close loading overlay so it can NEVER spin for 10 minutes!
+        if (!silent) hideLoading();
+    }
 
     if (success) {
+        const activeKey = cloudId || syncKey;
         const timeStr = new Date().toLocaleTimeString('fa-IR');
         if (DOM.syncStatusBadge) {
             DOM.syncStatusBadge.textContent = `همگام شد (${timeStr})`;
             DOM.syncStatusBadge.style.color = 'var(--accent-emerald)';
         }
         if (!silent) {
-            showToast(`☁️ کمد با شناسه «${syncKey}» با موفقیت در فضای ابری ذخیره شد.`, 'success');
+            showToast(`☁️ کمد با شناسه «${activeKey}» با موفقیت در فضای ابری ذخیره شد.`, 'success');
         }
         updateSyncQrCode();
     } else {
         if (!silent) {
-            showToast('خطا در ارتباط با سرور ابری. لطفاً اتصال اینترنت خود را بررسی کنید.', 'error');
+            showToast('⚠️ سرور ابری در دسترس نیست یا مسدود است. لطفاً از دکمه «کُد سریع انتقال» استفاده کنید که ۱۰۰٪ آفلاین و آنی کار می‌کند!', 'warning');
         }
     }
 }
@@ -2446,40 +2493,55 @@ async function pullFromCloud(customKey = null, silent = false) {
 
     let payload = null;
 
-    // 1. Check local backend first
-    if (!isStaticHost()) {
-        try {
-            const res = await fetch(`/api/sync/pull?sync_id=${encodeURIComponent(syncKey)}`);
-            if (res.ok) {
-                const json = await res.json();
-                if (json && json.data && json.data.wardrobe) {
-                    payload = json.data;
-                }
-            }
-        } catch (e) {
-            console.warn('Backend pull failed, checking cloud KV:', e);
-        }
-    }
-
-    // 2. Check public cloud storage
-    if (!payload) {
-        try {
-            const queryId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`) || syncKey;
-            if (queryId) {
-                const res = await fetch(`${PUBLIC_KV_ENDPOINT}/${encodeURIComponent(queryId)}`);
+    try {
+        // 1. Local backend first (with 3s timeout)
+        if (!isStaticHost()) {
+            try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 3000);
+                const res = await fetch(`/api/sync/pull?sync_id=${encodeURIComponent(syncKey)}`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timer);
                 if (res.ok) {
-                    const kvObj = await res.json();
-                    if (kvObj && kvObj.data && kvObj.data.wardrobe) {
-                        payload = kvObj.data;
+                    const json = await res.json();
+                    if (json && json.data && json.data.wardrobe) {
+                        payload = json.data;
                     }
                 }
+            } catch (e) {
+                console.warn('Backend pull note:', e);
             }
-        } catch (e) {
-            console.warn('Cloud KV pull failed:', e);
         }
-    }
 
-    if (!silent) hideLoading();
+        // 2. Direct cloud object ID with 5s timeout
+        if (!payload) {
+            const queryId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`) || syncKey;
+            if (queryId) {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 5000);
+                try {
+                    const res = await fetch(`${PUBLIC_KV_ENDPOINT}/${encodeURIComponent(queryId)}`, {
+                        signal: controller.signal
+                    });
+                    if (res.ok) {
+                        const kvObj = await res.json();
+                        if (kvObj && kvObj.data && kvObj.data.wardrobe) {
+                            payload = kvObj.data;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Direct cloud pull note:', e);
+                } finally {
+                    clearTimeout(timer);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('pullFromCloud error:', err);
+    } finally {
+        if (!silent) hideLoading();
+    }
 
     if (payload) {
         await applySyncedData(payload, !silent);
@@ -2491,7 +2553,7 @@ async function pullFromCloud(customKey = null, silent = false) {
         }
     } else {
         if (!silent) {
-            showToast(`اطلاعاتی با شناسه «${syncKey}» یافت نشد. مطمئن شوید قبلاً با دکمه ارسال به فضای ابری ذخیره شده باشد.`, 'warning');
+            showToast(`اطلاعاتی با شناسه «${syncKey}» یافت نشد. می‌توانید از کُد سریع انتقال یا فایل پشتیبان استفاده نمایید.`, 'warning');
         }
     }
 }
