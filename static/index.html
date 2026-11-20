@@ -853,17 +853,34 @@
                 <div class="sync-box" style="border: 2px solid var(--accent-indigo, #6366f1); background: rgba(99, 102, 241, 0.06);">
                     <div class="sync-box-header">
                         <span class="box-icon">⚡</span>
-                        <h4>کُد سریع انتقال (توصیه شده - انتقال فوری و ۱۰۰٪ بدون خطا)</h4>
+                        <h4>کُد سریع انتقال (انتقال فوری عکس‌ها، کمد و تنظیمات بدون سرور)</h4>
                     </div>
                     <p class="sync-box-desc">
-                        بدون نیاز به اینترنت یا سرور ابری! با یک کلیک کُد تمام کمد، عکس‌ها و کلید API را کپی کنید و در پیام‌رسان (تلگرام، ایتا، بله) برای گوشی خود بفرستید:
+                        ۱۰۰٪ آفلاین و بدون محدودیت حجم! کُد زیر را در کامپیوتر تولید کنید و در گوشی خود جای‌گذاری نمایید تا همه عکس‌ها، لباس‌ها و کلید API دقیقاً منتقل شوند:
                     </p>
                     <div class="sync-actions-row">
                         <button type="button" id="copySyncCodeBtn" class="btn-primary" style="flex: 1;">
-                            <span>📋 کپی کُد انتقال کمد</span>
+                            <span>📋 تولید و کپی کُد انتقال کمد</span>
                         </button>
-                        <button type="button" id="pasteSyncCodeBtn" class="btn-secondary" style="flex: 1;">
-                            <span>📥 وارد کردن کُد در این دستگاه</span>
+                    </div>
+
+                    <!-- Export Display Area -->
+                    <div id="syncCodeExportContainer" style="display: none; margin-top: 10px;">
+                        <textarea id="syncCodeExportArea" readonly rows="3" style="width: 100%; border-radius: 8px; font-family: monospace; font-size: 0.8rem; padding: 8px; background: rgba(15, 23, 42, 0.7); color: #e2e8f0; border: 1px solid var(--border-color); direction: ltr; resize: vertical; box-sizing: border-box;"></textarea>
+                        <div style="display: flex; gap: 8px; margin-top: 6px; align-items: center;">
+                            <button type="button" id="copyExportedCodeBtn" class="btn-secondary" style="font-size: 0.85rem; padding: 4px 12px;">📋 کپی مجدد متن</button>
+                            <span style="font-size: 0.8rem; color: #10b981; display: none;" id="copySuccessNotice">✓ در کلیپ‌بورد کپی شد</span>
+                        </div>
+                    </div>
+
+                    <!-- Import Area (replaces prompt) -->
+                    <div style="margin-top: 14px; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 12px;">
+                        <label for="syncCodeImportArea" style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 6px; color: var(--text-primary);">
+                            📥 اگر کُد انتقال را از دستگاه دیگر دریافت کرده‌اید، در کادر زیر Paste کنید:
+                        </label>
+                        <textarea id="syncCodeImportArea" rows="3" placeholder="کُد انتقال شروع‌شونده با WEARWISE:... را اینجا جای‌گذاری کنید" style="width: 100%; border-radius: 8px; font-family: monospace; font-size: 0.8rem; padding: 8px; background: rgba(15, 23, 42, 0.7); color: #e2e8f0; border: 1px solid var(--border-color); direction: ltr; resize: vertical; box-sizing: border-box;"></textarea>
+                        <button type="button" id="applySyncCodeBtn" class="btn-primary" style="width: 100%; margin-top: 8px;">
+                            <span>✨ اعمال کمد و انتقال تمام تصاویر به این دستگاه</span>
                         </button>
                     </div>
                 </div>
