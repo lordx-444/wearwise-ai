@@ -2007,6 +2007,110 @@ def upload_clothing_photo(file: UploadFile = File(...), auto_save: bool = Form(T
     }
 
 # -------------------------------------------------------------
+# Smart Garment Classification & Outfit Structure Sanitizer
+# -------------------------------------------------------------
+def classify_item(name: str) -> str:
+    n = (name or "").lower()
+    if any(k in n for k in ['ساعت', 'عینک', 'کلاه', 'شال', 'دستبند', 'کیف', 'کمربند', 'گردنبند']):
+        return 'ACCESSORY'
+    if any(k in n for k in ['کفش', 'کتانی', 'بوت', 'نیم‌بوت', 'صندل', 'لوفر', 'اسنیکرز']):
+        return 'SHOES'
+    if any(k in n for k in ['کاپشن', 'پالتو', 'بارانی', 'ترنچ', 'پافر', 'بادگیر', 'اورکت', 'کت تک', 'کت چرم', 'کت زمستانه']):
+        return 'OUTERWEAR'
+    if any(k in n for k in ['شلوار', 'جین', 'کتان', 'اسلش', 'دامن', 'شلوارک', 'بگ', 'مام استایل']):
+        return 'BOTTOM'
+    if any(k in n for k in ['پلیور', 'بافت', 'هودی', 'دورس', 'سویشرت', 'ژاکت', 'یقه اسکی', 'بلوز بافت']):
+        return 'WARM_TOP'
+    if any(k in n for k in ['تیشرت', 'تی‌شرت', 'پلوشرت', 'پولوشرت', 'پیراهن', 'تاپ', 'بلوز', 'شومیز']):
+        return 'BASE_TOP'
+    return 'OTHER'
+
+def sanitize_outfits_structure(outfits: List[Dict[str, Any]], wardrobe_names: Optional[List[str]] = None, gender: str = "unisex") -> List[Dict[str, Any]]:
+    """
+    Enforces strict, realistic fashion rules:
+    - AT MOST 1 Warm Top (NEVER 2 pullovers or pullover + hoodie together).
+    - AT MOST 1 Outerwear (NEVER 2 jackets/coats).
+    - EXACTLY 1 Bottom (NEVER 2 pants, never 0 pants).
+    - EXACTLY 1 Pair of Shoes (NEVER 2 shoes, never 0 shoes).
+    - AT MOST 1 Accessory.
+    """
+    if not outfits or not isinstance(outfits, list):
+        return outfits
+    wardrobe_set = set(w.strip() for w in (wardrobe_names or []))
+
+    sanitized = []
+    for outfit in outfits:
+        if not isinstance(outfit, dict):
+            sanitized.append(outfit)
+            continue
+
+        from_w = set(w.strip() for w in outfit.get('from_wardrobe', []))
+        items = list(outfit.get('items', []))
+        if not items and (outfit.get('from_wardrobe') or outfit.get('general_suggestions')):
+            items = list(outfit.get('from_wardrobe') or []) + list(outfit.get('general_suggestions') or [])
+
+        slots = {'BASE_TOP': [], 'WARM_TOP': [], 'OUTERWEAR': [], 'BOTTOM': [], 'SHOES': [], 'ACCESSORY': [], 'OTHER': []}
+        for it in items:
+            cat = classify_item(it)
+            slots[cat].append(it)
+
+        final_items = []
+
+        # 1. Warm Top: At most 1 (NO TWO PULLOVERS/SWEATERS EVER)
+        chosen_warm = None
+        if slots['WARM_TOP']:
+            w_warm = [x for x in slots['WARM_TOP'] if x in from_w or x in wardrobe_set]
+            chosen_warm = w_warm[0] if w_warm else slots['WARM_TOP'][0]
+
+        # 2. Base Top: At most 1
+        chosen_base = None
+        if slots['BASE_TOP']:
+            w_base = [x for x in slots['BASE_TOP'] if x in from_w or x in wardrobe_set]
+            chosen_base = w_base[0] if w_base else slots['BASE_TOP'][0]
+        elif len(slots['WARM_TOP']) > 1 and not chosen_base:
+            # If 2 warm tops and no base top, replace the duplicate with an inner shirt
+            chosen_base = 'بلوز نخی زنانه' if gender == 'female' else 'پیراهن نخی زیرپلیور'
+
+        if chosen_base:
+            final_items.append(chosen_base)
+        if chosen_warm:
+            final_items.append(chosen_warm)
+
+        # 3. Bottom: Exactly 1
+        if slots['BOTTOM']:
+            w_btm = [x for x in slots['BOTTOM'] if x in from_w or x in wardrobe_set]
+            final_items.append(w_btm[0] if w_btm else slots['BOTTOM'][0])
+        else:
+            final_items.append('شلوار پارچه‌ای یا دامن' if gender == 'female' else 'شلوار جین کلاسیک')
+
+        # 4. Outerwear: At most 1
+        if slots['OUTERWEAR']:
+            w_out = [x for x in slots['OUTERWEAR'] if x in from_w or x in wardrobe_set]
+            final_items.append(w_out[0] if w_out else slots['OUTERWEAR'][0])
+
+        # 5. Shoes: Exactly 1
+        if slots['SHOES']:
+            w_shoe = [x for x in slots['SHOES'] if x in from_w or x in wardrobe_set]
+            final_items.append(w_shoe[0] if w_shoe else slots['SHOES'][0])
+        else:
+            final_items.append('کتانی راحت چرم')
+
+        # 6. Accessory: At most 1
+        if slots['ACCESSORY']:
+            w_acc = [x for x in slots['ACCESSORY'] if x in from_w or x in wardrobe_set]
+            final_items.append(w_acc[0] if w_acc else slots['ACCESSORY'][0])
+
+        new_from_w = [x for x in final_items if x in from_w or x in wardrobe_set]
+        new_gen_s = [x for x in final_items if x not in new_from_w]
+
+        outfit['items'] = final_items
+        outfit['from_wardrobe'] = new_from_w
+        outfit['general_suggestions'] = new_gen_s
+        sanitized.append(outfit)
+
+    return sanitized
+
+# -------------------------------------------------------------
 # Smart Fallback Recommender (Ensures 100% Reliability)
 # -------------------------------------------------------------
 def generate_fallback_recommendations(
@@ -2192,11 +2296,13 @@ def generate_fallback_recommendations(
             if wardrobe_names[0] not in o["items"]:
                 o["items"].insert(0, wardrobe_names[0])
 
+    sanitized_outfits = sanitize_outfits_structure(outfits, wardrobe_names=wardrobe_names, gender=gender)
+
     return {
         "summary": summary,
         "reason": reason,
         "umbrella": umbrella_needed,
-        "outfits": outfits
+        "outfits": sanitized_outfits
     }
 
 # -------------------------------------------------------------
@@ -2279,6 +2385,11 @@ def get_outfit_recommendations(req: RecommendationRequest):
                 f"{wardrobe_text}\n\n"
                 "CREATIVE DIVERSITY & ANTI-DUPLICATION RULE:\n"
                 "- Do NOT repeat previous suggestions. Ensure Outfit 1 is the primary destination look, Outfit 2 is an alternative weather-layering look, and Outfit 3 is a creative distinct silhouette.\n"
+                "- STRICT FASHION REALISM RULE (ZERO TOLERANCE FOR DUPLICATES):\n"
+                "  * NEVER combine two pullovers, two sweaters, or a pullover and a hoodie together in one outfit! Every outfit can have AT MOST ONE warm knitwear/mid-layer (one pullover OR one hoodie).\n"
+                "  * NEVER combine two jackets or two coats together.\n"
+                "  * NEVER combine two bottoms/pants together.\n"
+                "  * Standard composition per outfit: EXACTLY 1 Bottom + EXACTLY 1 Pair of Shoes + AT MOST 1 Base Top (T-shirt/Shirt) + AT MOST 1 Mid-layer (Pullover/Hoodie) + AT MOST 1 Outerwear (Jacket/Coat) + AT MOST 1 Accessory.\n"
                 "- Tailor garment choices (e.g. women vs men attire) accurately to the specified Gender.\n\n"
                 "Generate the complete structured outfit recommendations according to the schema."
             )
@@ -2316,6 +2427,14 @@ def get_outfit_recommendations(req: RecommendationRequest):
             temp_sensitivity=req.temp_sensitivity or "normal",
             language=req.language or "fa",
             variation_seed=req.variation_seed
+        )
+
+    # Guarantee strict fashion rules (NO duplicate pullovers, jackets, or pants)
+    if result and "outfits" in result:
+        result["outfits"] = sanitize_outfits_structure(
+            result["outfits"],
+            wardrobe_names=[w.get("name") for w in wardrobe_list],
+            gender=req.gender or "unisex"
         )
 
     # Enrich each outfit with individual garment photos & wardrobe indicators
