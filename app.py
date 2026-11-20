@@ -2599,6 +2599,35 @@ class CloudSyncPushRequest(BaseModel):
     class Config:
         extra = "allow"
 
+def get_image_thumbnail_data_url(img_path_or_url: str, max_dim: int = 240, quality: int = 70) -> str:
+    """Convert local upload image into an ultra-portable compressed base64 data URL for cross-device transfer."""
+    if not img_path_or_url or not isinstance(img_path_or_url, str):
+        return img_path_or_url
+    if img_path_or_url.startswith("data:") or img_path_or_url.startswith("http://") or img_path_or_url.startswith("https://"):
+        return img_path_or_url
+    try:
+        fn = os.path.basename(img_path_or_url)
+        full_path = STATIC_DIR / "uploads" / fn
+        if not full_path.exists():
+            return img_path_or_url
+        from PIL import Image
+        import io, base64
+        with Image.open(full_path) as im:
+            im.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            if im.mode in ('RGBA', 'LA') or (im.mode == 'P' and 'transparency' in im.info):
+                bg = Image.new('RGB', im.size, (255, 255, 255))
+                mask = im.split()[3] if im.mode == 'RGBA' else None
+                bg.paste(im, mask=mask)
+                bg.save(buf, format='JPEG', quality=quality)
+            else:
+                im.convert('RGB').save(buf, format='JPEG', quality=quality)
+            b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+            return f"data:image/jpeg;base64,{b64}"
+    except Exception as e:
+        print(f"Thumbnail generation error: {e}")
+        return img_path_or_url
+
 @app.post("/api/sync/push")
 def sync_push(req: CloudSyncPushRequest):
     """Save full user wardrobe, profile, and settings into the cloud_sync table under a unique sync_id."""
@@ -2606,10 +2635,18 @@ def sync_push(req: CloudSyncPushRequest):
     if not sync_id:
         raise HTTPException(status_code=400, detail="شناسه همگام‌سازی (sync_id) نمی‌تواند خالی باشد.")
     
+    # Process wardrobe images to ensure portable data URLs
+    clean_wardrobe = []
+    for item in (req.wardrobe or []):
+        it = dict(item)
+        if it.get("image_url"):
+            it["image_url"] = get_image_thumbnail_data_url(it["image_url"])
+        clean_wardrobe.append(it)
+
     payload_dict = {
         "sync_id": sync_id,
         "gemini_api_key": req.gemini_api_key or "",
-        "wardrobe": req.wardrobe or [],
+        "wardrobe": clean_wardrobe,
         "profile": req.profile or {},
         "settings": req.settings or {},
         "history": req.history or [],
@@ -2632,7 +2669,7 @@ def sync_push(req: CloudSyncPushRequest):
     return {
         "status": "success",
         "sync_id": sync_id,
-        "items_count": len(req.wardrobe or []),
+        "items_count": len(clean_wardrobe),
         "message": "اطلاعات با موفقیت در فضای ابری ذخیره شد."
     }
 
@@ -2666,17 +2703,24 @@ def sync_pull(sync_id: str):
 
 @app.get("/api/sync/export-full")
 def sync_export_full():
-    """Export complete server wardrobe, profile, and history as a JSON backup."""
+    """Export complete server wardrobe, profile, and history as a JSON backup with portable thumbnails."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM wardrobe ORDER BY id DESC")
-    wardrobe = [dict(r) for r in cursor.fetchall()]
+    wardrobe_rows = [dict(r) for r in cursor.fetchall()]
     
+    wardrobe = []
+    for item in wardrobe_rows:
+        it = dict(item)
+        if it.get("image_url"):
+            it["image_url"] = get_image_thumbnail_data_url(it["image_url"])
+        wardrobe.append(it)
+
     cursor.execute("SELECT * FROM user_profile WHERE id = 1")
     prof_row = cursor.fetchone()
     profile = dict(prof_row) if prof_row else {}
     
-    cursor.execute("SELECT * FROM history ORDER BY id DESC LIMIT 50")
+    cursor.execute("SELECT * FROM history ORDER BY id DESC LIMIT 5")
     history = [dict(r) for r in cursor.fetchall()]
     conn.close()
     
