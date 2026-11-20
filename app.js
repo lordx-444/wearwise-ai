@@ -2288,8 +2288,14 @@ async function loadWardrobe() {
 }
 
 function renderWardrobe(items) {
+    if (!items || !Array.isArray(items)) {
+        items = (state.wardrobe && state.wardrobe.length > 0) ? state.wardrobe : getLocalWardrobe();
+    }
     DOM.wardrobeGrid.innerHTML = '';
-    
+
+    if (DOM.totalWardrobeItems) DOM.totalWardrobeItems.textContent = items.length;
+    if (DOM.wardrobeBadgeCount) DOM.wardrobeBadgeCount.textContent = items.length;
+
     let filtered = items;
     if (state.activeCategoryFilter !== 'all') {
         filtered = items.filter(item => {
@@ -3246,7 +3252,12 @@ function setupApiKeyModal() {
 // -------------------------------------------------------------
 // Cross-Device Cloud Sync & Backup System
 // -------------------------------------------------------------
-const PUBLIC_KV_ENDPOINT = 'https://api.restful-api.dev/objects';
+
+function getSyncTopic(key) {
+    const raw = (key || 'default').trim().toLowerCase();
+    const safe = raw.replace(/[^a-zA-Z0-9_-]/g, (c) => '_' + c.charCodeAt(0).toString(16));
+    return `wearwise_sync_${safe}`;
+}
 
 function getSyncKey() {
     let key = localStorage.getItem('wearwise_sync_id');
@@ -3272,12 +3283,22 @@ function generateRandomSyncKey() {
     return rand;
 }
 
-function getSyncPayload() {
+function getSyncPayload(includeHistory = false) {
     const currentWardrobe = (state.wardrobe && state.wardrobe.length > 0) ? state.wardrobe : getLocalWardrobe();
-    return {
+    const cleanWardrobe = (currentWardrobe || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        color: item.color,
+        season: item.season,
+        image_url: item.image_url || getGarmentFallbackImage(item.name, item.category),
+        is_favorite: item.is_favorite || 0
+    }));
+
+    const payload = {
         sync_id: getSyncKey(),
         gemini_api_key: localStorage.getItem('wearwise_gemini_key') || '',
-        wardrobe: currentWardrobe,
+        wardrobe: cleanWardrobe,
         profile: state.profile || { gender: 'unisex', age_group: 'young_adult', fit_pref: 'regular', temp_sensitivity: 'normal' },
         settings: {
             theme: state.theme,
@@ -3286,9 +3307,15 @@ function getSyncPayload() {
             style: state.style,
             useWardrobe: state.useWardrobe
         },
-        history: getLocalHistory(),
         exported_at: new Date().toISOString()
     };
+
+    if (includeHistory) {
+        const fullHistory = getLocalHistory();
+        payload.history = fullHistory.filter(h => h.is_favorite === 1).slice(0, 2);
+    }
+
+    return payload;
 }
 
 async function applySyncedData(payload, showSuccessToast = true) {
@@ -3307,15 +3334,16 @@ async function applySyncedData(payload, showSuccessToast = true) {
     if (Array.isArray(payload.wardrobe) && payload.wardrobe.length > 0) {
         state.wardrobe = payload.wardrobe;
         safeSetLocalWardrobe(payload.wardrobe);
-        renderWardrobe();
-        updateWardrobeCount();
+        renderWardrobe(payload.wardrobe);
+        if (DOM.totalWardrobeItems) DOM.totalWardrobeItems.textContent = payload.wardrobe.length;
+        if (DOM.wardrobeBadgeCount) DOM.wardrobeBadgeCount.textContent = payload.wardrobe.length;
     }
 
     // 2. User Profile
     if (payload.profile && typeof payload.profile === 'object') {
         state.profile = { ...state.profile, ...payload.profile };
         localStorage.setItem('wearwise_profile', JSON.stringify(state.profile));
-        updateProfileButtonLabel();
+        syncProfileUI();
     }
 
     // 3. Settings (Theme, Lang, Destination, Style)
@@ -3340,7 +3368,7 @@ async function applySyncedData(payload, showSuccessToast = true) {
         }
     }
 
-    // 4. History
+    // 4. History (optional favorites)
     if (Array.isArray(payload.history) && payload.history.length > 0) {
         state.history = payload.history;
         localStorage.setItem('wearwise_history_items', JSON.stringify(payload.history));
@@ -3380,17 +3408,48 @@ async function pushToCloud(silent = false) {
     }
 
     if (!silent) {
-        showLoading('در حال ذخیره کمد در فضای ابری...', 'همگام‌سازی بین دستگاه‌ها');
+        showLoading('در حال ذخیره کمد در فضای ابری...', `شناسه: ${syncKey}`);
     }
 
     let success = false;
-    let cloudId = null;
 
     try {
-        const payload = getSyncPayload();
-        payload.sync_id = syncKey;
+        let payload = null;
+        if (!isStaticHost()) {
+            try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 3500);
+                const expRes = await fetch('/api/sync/export-full', { signal: controller.signal });
+                clearTimeout(timer);
+                if (expRes.ok) {
+                    const expData = await expRes.json();
+                    if (expData && expData.wardrobe) {
+                        payload = {
+                            sync_id: syncKey,
+                            gemini_api_key: localStorage.getItem('wearwise_gemini_key') || '',
+                            wardrobe: expData.wardrobe,
+                            profile: expData.profile || state.profile,
+                            settings: {
+                                theme: state.theme,
+                                lang: state.lang,
+                                destination: state.destination,
+                                style: state.style,
+                                useWardrobe: state.useWardrobe
+                            },
+                            exported_at: new Date().toISOString()
+                        };
+                    }
+                }
+            } catch (e) {
+                console.warn('Local export note:', e);
+            }
+        }
 
-        // 1. Backend sync endpoint (with strict 3.5s timeout)
+        if (!payload) {
+            payload = getSyncPayload();
+            payload.sync_id = syncKey;
+        }
+
         if (!isStaticHost()) {
             try {
                 const controller = new AbortController();
@@ -3408,96 +3467,48 @@ async function pushToCloud(silent = false) {
             }
         }
 
-        // 2. Public cloud storage for static GitHub Pages (with strict 5.5s timeout)
-        if (!success) {
-            // Keep public KV payload lightweight (< 900 bytes) so api.restful-api.dev does NOT crash with HTTP 500
-            const cloudPayload = {
-                ...payload,
-                wardrobe: (payload.wardrobe || []).map(item => ({
-                    id: item.id,
-                    name: item.name,
-                    category: item.category,
-                    color: item.color,
-                    season: item.season,
-                    image_url: (item.image_url && !item.image_url.startsWith('data:')) 
-                        ? item.image_url 
-                        : getGarmentFallbackImage(item.name, item.category)
-                }))
-            };
+        const topic = getSyncTopic(syncKey);
+        const jsonStr = JSON.stringify(payload);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
 
-            const storedObjectId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`) || (syncKey.length > 20 ? syncKey : null);
-            let kvRes = null;
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 5500);
-
-            try {
-                if (storedObjectId) {
-                    try {
-                        kvRes = await fetch(`${PUBLIC_KV_ENDPOINT}/${storedObjectId}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                name: `wearwise_${syncKey}`,
-                                data: cloudPayload
-                            }),
-                            signal: controller.signal
-                        });
-                        if (kvRes && kvRes.ok) {
-                            cloudId = storedObjectId;
-                            success = true;
-                        }
-                    } catch (_) {}
-                }
-
-                if (!success) {
-                    kvRes = await fetch(PUBLIC_KV_ENDPOINT, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            name: `wearwise_${syncKey}`,
-                            data: cloudPayload
-                        }),
-                        signal: controller.signal
-                    });
-                    if (kvRes && kvRes.ok) {
-                        const kvData = await kvRes.json();
-                        if (kvData && kvData.id) {
-                            cloudId = kvData.id;
-                            localStorage.setItem(`wearwise_cloud_obj_${syncKey}`, cloudId);
-                            localStorage.setItem(`wearwise_cloud_obj_${cloudId}`, cloudId);
-                            setSyncKey(cloudId);
-                            if (DOM.syncKeyInput) DOM.syncKeyInput.value = cloudId;
-                            success = true;
-                        }
-                    }
-                }
-            } catch (cloudErr) {
-                console.warn('Cloud KV timed out or network blocked:', cloudErr);
-            } finally {
-                clearTimeout(timer);
+        try {
+            const ntfyRes = await fetch(`https://ntfy.sh/${topic}`, {
+                method: 'POST',
+                headers: {
+                    'Filename': 'wardrobe.json',
+                    'Title': 'WearWise Sync',
+                    'Priority': 'default'
+                },
+                body: jsonStr,
+                signal: controller.signal
+            });
+            clearTimeout(timer);
+            if (ntfyRes.ok) {
+                success = true;
             }
+        } catch (ntfyErr) {
+            console.warn('ntfy push note:', ntfyErr);
         }
     } catch (err) {
         console.error('pushToCloud error:', err);
     } finally {
-        // ALWAYS close loading overlay so it can NEVER spin for 10 minutes!
         if (!silent) hideLoading();
     }
 
     if (success) {
-        const activeKey = cloudId || syncKey;
         const timeStr = new Date().toLocaleTimeString('fa-IR');
         if (DOM.syncStatusBadge) {
             DOM.syncStatusBadge.textContent = `همگام شد (${timeStr})`;
             DOM.syncStatusBadge.style.color = 'var(--accent-emerald)';
         }
         if (!silent) {
-            showToast(`☁️ کمد با شناسه «${activeKey}» با موفقیت در فضای ابری ذخیره شد.`, 'success');
+            showToast(`☁️ کمد با شناسه «${syncKey}» با موفقیت در فضای ابری ذخیره شد. در گوشی یا دیوایس دیگر کافیست این شناسه را وارد کنید یا بارکد را اسکن نمایید!`, 'success');
         }
         updateSyncQrCode();
     } else {
         if (!silent) {
-            showToast('⚠️ سرور ابری در دسترس نیست یا مسدود است. لطفاً از دکمه «کُد سریع انتقال» استفاده کنید که ۱۰۰٪ آفلاین و آنی کار می‌کند!', 'warning');
+            showToast('⚠️ خطایی در اتصال به سرور رخ داد. می‌توانید از دکمه «کُد سریع انتقال» یا «فایل پشتیبان» استفاده کنید.', 'warning');
         }
     }
 }
@@ -3518,7 +3529,6 @@ async function pullFromCloud(customKey = null, silent = false) {
     let payload = null;
 
     try {
-        // 1. Local backend first (with 3s timeout)
         if (!isStaticHost()) {
             try {
                 const controller = new AbortController();
@@ -3538,27 +3548,44 @@ async function pullFromCloud(customKey = null, silent = false) {
             }
         }
 
-        // 2. Direct cloud object ID with 5s timeout
         if (!payload) {
-            const queryId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`) || syncKey;
-            if (queryId) {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 5000);
-                try {
-                    const res = await fetch(`${PUBLIC_KV_ENDPOINT}/${encodeURIComponent(queryId)}`, {
-                        signal: controller.signal
-                    });
-                    if (res.ok) {
-                        const kvObj = await res.json();
-                        if (kvObj && kvObj.data && kvObj.data.wardrobe) {
-                            payload = kvObj.data;
+            const topic = getSyncTopic(syncKey);
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            try {
+                const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timer);
+                if (res.ok) {
+                    const text = await res.text();
+                    const lines = text.trim().split('\n');
+                    let lastMessage = null;
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const parsed = JSON.parse(line);
+                            if (parsed && parsed.event === 'message') {
+                                lastMessage = parsed;
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (lastMessage) {
+                        if (lastMessage.attachment && lastMessage.attachment.url) {
+                            const attRes = await fetch(lastMessage.attachment.url);
+                            if (attRes.ok) {
+                                payload = await attRes.json();
+                            }
+                        } else if (lastMessage.message) {
+                            try {
+                                payload = JSON.parse(lastMessage.message);
+                            } catch (_) {}
                         }
                     }
-                } catch (e) {
-                    console.warn('Direct cloud pull note:', e);
-                } finally {
-                    clearTimeout(timer);
                 }
+            } catch (e) {
+                console.warn('Direct cloud pull note:', e);
             }
         }
     } catch (err) {
@@ -3567,7 +3594,7 @@ async function pullFromCloud(customKey = null, silent = false) {
         if (!silent) hideLoading();
     }
 
-    if (payload) {
+    if (payload && payload.wardrobe && Array.isArray(payload.wardrobe) && payload.wardrobe.length > 0) {
         await applySyncedData(payload, !silent);
         updateSyncQrCode();
         if (DOM.syncStatusBadge) {
@@ -3577,7 +3604,7 @@ async function pullFromCloud(customKey = null, silent = false) {
         }
     } else {
         if (!silent) {
-            showToast(`اطلاعاتی با شناسه «${syncKey}» یافت نشد. می‌توانید از کُد سریع انتقال یا فایل پشتیبان استفاده نمایید.`, 'warning');
+            showToast(`اطلاعاتی با شناسه «${syncKey}» در فضای ابری یافت نشد. لطفاً در دستگاه مبدأ دکمه «ارسال به فضای ابری» را بزنید.`, 'warning');
         }
     }
 }
@@ -3601,17 +3628,42 @@ function updateSyncQrCode() {
     }
 }
 
-function exportBackupFile() {
-    const payload = getSyncPayload();
+async function exportBackupFile() {
+    let payload = null;
+    if (!isStaticHost()) {
+        try {
+            const res = await fetch('/api/sync/export-full');
+            if (res.ok) {
+                const data = await res.json();
+                payload = {
+                    sync_id: getSyncKey(),
+                    gemini_api_key: localStorage.getItem('wearwise_gemini_key') || '',
+                    wardrobe: data.wardrobe,
+                    profile: data.profile || state.profile,
+                    settings: {
+                        theme: state.theme,
+                        lang: state.lang,
+                        destination: state.destination,
+                        style: state.style,
+                        useWardrobe: state.useWardrobe
+                    },
+                    exported_at: new Date().toISOString()
+                };
+            }
+        } catch (_) {}
+    }
+    if (!payload) {
+        payload = getSyncPayload();
+    }
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
     const downloadAnchor = document.createElement('a');
     const dateStr = new Date().toISOString().slice(0, 10);
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `wearwise_backup_${dateStr}.json`);
+    downloadAnchor.setAttribute('download', `wearwise_wardrobe_backup_${dateStr}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    showToast('💾 فایل پشتیبان کامل کمد با موفقیت دانلود شد.', 'success');
+    showToast('💾 فایل پشتیبان کمد با موفقیت دانلود شد.', 'success');
 }
 
 function importBackupFile(file) {
@@ -3656,15 +3708,14 @@ function setupSyncModal() {
 
     if (!syncModalBtn || !syncModal) return;
 
-    // Load initial sync ID
     const initialKey = getSyncKey();
     if (syncKeyInput) syncKeyInput.value = initialKey;
 
-    // Open Modal
     syncModalBtn.addEventListener('click', () => {
         syncModal.style.display = 'flex';
         if (syncKeyInput) syncKeyInput.value = getSyncKey();
         updateSyncQrCode();
+        pushToCloud(true);
     });
 
     const closeModal = () => {
@@ -3674,7 +3725,6 @@ function setupSyncModal() {
     if (closeSyncModal) closeSyncModal.addEventListener('click', closeModal);
     if (closeSyncModalBtn) closeSyncModalBtn.addEventListener('click', closeModal);
 
-    // Generate Random Key
     if (generateSyncKeyBtn) {
         generateSyncKeyBtn.addEventListener('click', () => {
             const newKey = generateRandomSyncKey();
@@ -3685,41 +3735,42 @@ function setupSyncModal() {
         });
     }
 
-    // Copy Direct Link for Phone
     if (copySyncLinkBtn) {
         copySyncLinkBtn.addEventListener('click', () => {
             const syncKey = (syncKeyInput.value || getSyncKey()).trim();
             const currentUrl = window.location.href.split('?')[0];
             const directSyncUrl = `${currentUrl}?sync=${encodeURIComponent(syncKey)}`;
-            navigator.clipboard.writeText(directSyncUrl).then(() => {
-                showToast('📋 لینک ورود مستقیم به گوشی در کلیپ‌بورد کپی شد.', 'success');
-            }).catch(() => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(directSyncUrl).then(() => {
+                    showToast('📋 لینک ورود مستقیم به گوشی در کلیپ‌بورد کپی شد.', 'success');
+                }).catch(() => {
+                    prompt('لینک کمد شما برای باز کردن در گوشی:', directSyncUrl);
+                });
+            } else {
                 prompt('لینک کمد شما برای باز کردن در گوشی:', directSyncUrl);
-            });
+            }
         });
     }
 
-    // Push Button
     if (pushSyncBtn) {
         pushSyncBtn.addEventListener('click', () => pushToCloud(false));
     }
 
-    // Pull Button
     if (pullSyncBtn) {
         pullSyncBtn.addEventListener('click', () => pullFromCloud(syncKeyInput.value.trim(), false));
     }
 
-    // Generate QR Button
     if (generateQrBtn) {
-        generateQrBtn.addEventListener('click', updateSyncQrCode);
+        generateQrBtn.addEventListener('click', () => {
+            updateSyncQrCode();
+            pushToCloud(true);
+        });
     }
 
-    // Export Backup
     if (exportBackupBtn) {
         exportBackupBtn.addEventListener('click', exportBackupFile);
     }
 
-    // Import Backup
     if (importBackupBtn && fileInput) {
         importBackupBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', (e) => {
@@ -3730,25 +3781,22 @@ function setupSyncModal() {
         });
     }
 
-    // Quick Sync Code (Copy/Paste text - 100% Offline & Reliable)
     if (DOM.copySyncCodeBtn) {
         DOM.copySyncCodeBtn.addEventListener('click', () => {
             try {
-                const payload = getSyncPayload();
+                const payload = getSyncPayload(false);
                 const jsonStr = JSON.stringify(payload);
                 const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => {
                     return String.fromCharCode('0x' + p1);
                 }));
                 const quickCode = `WEARWISE:${b64}`;
 
-                // Display in textarea
                 if (DOM.syncCodeExportContainer && DOM.syncCodeExportArea) {
                     DOM.syncCodeExportContainer.style.display = 'block';
                     DOM.syncCodeExportArea.value = quickCode;
                     DOM.syncCodeExportArea.select();
                 }
 
-                // Copy to clipboard
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                     navigator.clipboard.writeText(quickCode).then(() => {
                         if (DOM.copySuccessNotice) {
@@ -3792,7 +3840,6 @@ function setupSyncModal() {
         });
     }
 
-    // Apply pasted sync code (Directly from textarea - No truncation, No prompt)
     if (DOM.applySyncCodeBtn) {
         DOM.applySyncCodeBtn.addEventListener('click', async () => {
             const codeInput = (DOM.syncCodeImportArea ? DOM.syncCodeImportArea.value : '').trim();
@@ -3814,7 +3861,14 @@ function setupSyncModal() {
                 } else if (rawCode.startsWith('{')) {
                     jsonText = rawCode;
                 } else {
-                    throw new Error('فرمت کُد انتقال نامعتبر است (باید با WEARWISE: شروع شود).');
+                    try {
+                        const decoded = decodeURIComponent(Array.prototype.map.call(atob(rawCode), (c) => {
+                            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                        }).join(''));
+                        jsonText = decoded;
+                    } catch (_) {
+                        throw new Error('فرمت کُد انتقال نامعتبر است (باید با WEARWISE: یا { شروع شود).');
+                    }
                 }
 
                 const parsed = JSON.parse(jsonText);
@@ -3829,7 +3883,6 @@ function setupSyncModal() {
                     updateSyncQrCode();
                 }
                 if (DOM.syncCodeImportArea) DOM.syncCodeImportArea.value = '';
-                showToast('🎉 تمام لباس‌ها، تصاویر، کلید API و تنظیمات با موفقیت منتقل شدند!', 'success');
             } catch (err) {
                 showToast('خطا در اعمال کُد انتقال: ' + err.message, 'error');
             }
@@ -3837,7 +3890,19 @@ function setupSyncModal() {
     }
 
     if (DOM.pasteSyncCodeBtn) {
-        DOM.pasteSyncCodeBtn.addEventListener('click', () => {
+        DOM.pasteSyncCodeBtn.addEventListener('click', async () => {
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text && (text.startsWith('WEARWISE:') || text.startsWith('{'))) {
+                        if (DOM.syncCodeImportArea) {
+                            DOM.syncCodeImportArea.value = text.trim();
+                            showToast('📋 کُد انتقال با موفقیت از کلیپ‌بورد جای‌گذاری شد.', 'success');
+                        }
+                        return;
+                    }
+                } catch (_) {}
+            }
             if (DOM.syncCodeImportArea) {
                 DOM.syncCodeImportArea.focus();
                 DOM.syncCodeImportArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3845,7 +3910,6 @@ function setupSyncModal() {
         });
     }
 
-    // Auto-Sync Toggle
     if (autoSyncCheckbox) {
         const autoSyncStored = localStorage.getItem('wearwise_autosync') !== 'false';
         autoSyncCheckbox.checked = autoSyncStored;
