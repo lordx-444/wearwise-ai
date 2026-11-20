@@ -789,14 +789,75 @@
             </p>
 
             <div class="sync-modal-body">
-                <!-- Section 1: Cloud Sync ID -->
-                <div class="sync-box">
+                <!-- Section 1: Direct Sync Code (Primary, Guaranteed & 100% Offline) -->
+                <div class="sync-box" style="border: 2px solid var(--accent-indigo, #6366f1); background: rgba(99, 102, 241, 0.08);">
                     <div class="sync-box-header">
-                        <span class="box-icon">🔑</span>
-                        <h4>شناسه اختصاصی کمد شما (Sync Key)</h4>
+                        <span class="box-icon">⚡</span>
+                        <h4>روش اول: کُد سریع انتقال (۱۰۰٪ تضمینی، آفلاین و بدون نیاز به سرور)</h4>
                     </div>
                     <p class="sync-box-desc">
-                        این شناسه را در هر دستگاهی (گوشی، لپ‌تاپ دیگر و...) وارد کنید تا به تمام لباس‌های خود دسترسی داشته باشید:
+                        این روش در تمام گوشی‌ها و شبکه‌ها کار می‌کند! کُد کمد را در کامپیوتر کپی کرده، در پیام‌رسان بفرستید و در گوشی اعمال نمایید تا تمام ۲۹ لباس، عکس‌ها و کلید API در کسری از ثانیه منتقل شوند:
+                    </p>
+                    <div class="sync-actions-row">
+                        <button type="button" id="copySyncCodeBtn" class="btn-primary" style="flex: 1;">
+                            <span>📋 ۱. تولید و کپی کُد انتقال کمد</span>
+                        </button>
+                    </div>
+
+                    <!-- Export Display Area -->
+                    <div id="syncCodeExportContainer" style="display: none; margin-top: 10px;">
+                        <textarea id="syncCodeExportArea" readonly rows="3" style="width: 100%; border-radius: 8px; font-family: monospace; font-size: 0.8rem; padding: 8px; background: rgba(15, 23, 42, 0.7); color: #e2e8f0; border: 1px solid var(--border-color); direction: ltr; resize: vertical; box-sizing: border-box;"></textarea>
+                        <div style="display: flex; gap: 8px; margin-top: 6px; align-items: center;">
+                            <button type="button" id="copyExportedCodeBtn" class="btn-secondary" style="font-size: 0.85rem; padding: 4px 12px;">📋 کپی مجدد متن</button>
+                            <span style="font-size: 0.8rem; color: #10b981; display: none;" id="copySuccessNotice">✓ در کلیپ‌بورد کپی شد</span>
+                        </div>
+                    </div>
+
+                    <!-- Import Area for Phone -->
+                    <div style="margin-top: 14px; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 12px;">
+                        <label for="syncCodeImportArea" style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 6px; color: var(--text-primary);">
+                            📥 اگر در گوشی هستید، کُد را در کادر زیر جای‌گذاری کنید:
+                        </label>
+                        <textarea id="syncCodeImportArea" rows="3" placeholder="کُد انتقال شروع‌شونده با WEARWISE:... را اینجا جای‌گذاری کنید" style="width: 100%; border-radius: 8px; font-family: monospace; font-size: 0.8rem; padding: 8px; background: rgba(15, 23, 42, 0.7); color: #e2e8f0; border: 1px solid var(--border-color); direction: ltr; resize: vertical; box-sizing: border-box;"></textarea>
+                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                            <button type="button" id="pasteSyncCodeBtn" class="btn-secondary" style="flex: 1;">
+                                <span>📋 خواندن از کلیپ‌بورد</span>
+                            </button>
+                            <button type="button" id="applySyncCodeBtn" class="btn-primary" style="flex: 2;">
+                                <span>✨ اعمال کمد روی این دستگاه</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Offline Backup (JSON File) -->
+                <div class="sync-box">
+                    <div class="sync-box-header">
+                        <span class="box-icon">💾</span>
+                        <h4>روش دوم: پشتیبان‌گیری و انتقال با فایل (JSON)</h4>
+                    </div>
+                    <p class="sync-box-desc">
+                        کمد را به صورت یک فایل پشتیبان دانلود کنید، در تلگرام یا واتساپ برای خود بفرستید و در گوشی بازیابی نمایید (۱۰۰٪ مستقل از اینترنت):
+                    </p>
+                    <div class="sync-actions-row">
+                        <button type="button" id="exportBackupBtn" class="btn-secondary">
+                            <span>💾 دانلود فایل کمد (JSON)</span>
+                        </button>
+                        <button type="button" id="importBackupBtn" class="btn-secondary">
+                            <span>📂 بازیابی از فایل</span>
+                        </button>
+                        <input type="file" id="importBackupFile" accept=".json" style="display: none;" />
+                    </div>
+                </div>
+
+                <!-- Section 3: Cloud Sync & QR Code -->
+                <div class="sync-box">
+                    <div class="sync-box-header">
+                        <span class="box-icon">☁️</span>
+                        <h4>روش سوم: همگام‌سازی ابری و بارکد (Cloud / QR Code)</h4>
+                    </div>
+                    <p class="sync-box-desc">
+                        نیازمند سرور فعال یا اینترنت بین‌الملل. با این شناسه کمد در فضای ابری ذخیره شده و با دوربین گوشی قابل اسکن است:
                     </p>
                     <div class="sync-input-row">
                         <input type="text" id="syncKeyInput" placeholder="مثلاً lordx-444 یا نام دلخواه شما" spellcheck="false" autocomplete="off" />
@@ -824,18 +885,9 @@
                         </label>
                         <span class="sync-status-indicator" id="syncStatusBadge">وضعیت: آماده</span>
                     </div>
-                </div>
 
-                <!-- Section 2: QR Code Instant Phone Transfer -->
-                <div class="sync-box">
-                    <div class="sync-box-header">
-                        <span class="box-icon">📱</span>
-                        <h4>انتقال فوری به موبایل با بارکد (QR Code)</h4>
-                    </div>
-                    <p class="sync-box-desc">
-                        برای باز کردن کمد روی گوشی، کافیست با دوربین موبایل، بارکد زیر را اسکن کنید تا سایت باز شده و لباس‌ها بدون تایپ کردن لود شوند:
-                    </p>
-                    <div class="sync-qr-wrapper">
+                    <!-- QR Code -->
+                    <div class="sync-qr-wrapper" style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 12px;">
                         <button type="button" id="generateQrBtn" class="btn-secondary" style="margin-bottom: 10px;">
                             <span>🔄 به‌روزرسانی بارکد بر اساس شناسه فعلی</span>
                         </button>
@@ -846,62 +898,6 @@
                             </div>
                         </div>
                         <p class="sync-qr-hint" id="syncQrHint"></p>
-                    </div>
-                </div>
-
-                <!-- Section 2.5: Direct Sync Code -->
-                <div class="sync-box" style="border: 2px solid var(--accent-indigo, #6366f1); background: rgba(99, 102, 241, 0.06);">
-                    <div class="sync-box-header">
-                        <span class="box-icon">⚡</span>
-                        <h4>کُد سریع انتقال (انتقال فوری عکس‌ها، کمد و تنظیمات بدون سرور)</h4>
-                    </div>
-                    <p class="sync-box-desc">
-                        ۱۰۰٪ آفلاین و بدون محدودیت حجم! کُد زیر را در کامپیوتر تولید کنید و در گوشی خود جای‌گذاری نمایید تا همه عکس‌ها، لباس‌ها و کلید API دقیقاً منتقل شوند:
-                    </p>
-                    <div class="sync-actions-row">
-                        <button type="button" id="copySyncCodeBtn" class="btn-primary" style="flex: 1;">
-                            <span>📋 تولید و کپی کُد انتقال کمد</span>
-                        </button>
-                    </div>
-
-                    <!-- Export Display Area -->
-                    <div id="syncCodeExportContainer" style="display: none; margin-top: 10px;">
-                        <textarea id="syncCodeExportArea" readonly rows="3" style="width: 100%; border-radius: 8px; font-family: monospace; font-size: 0.8rem; padding: 8px; background: rgba(15, 23, 42, 0.7); color: #e2e8f0; border: 1px solid var(--border-color); direction: ltr; resize: vertical; box-sizing: border-box;"></textarea>
-                        <div style="display: flex; gap: 8px; margin-top: 6px; align-items: center;">
-                            <button type="button" id="copyExportedCodeBtn" class="btn-secondary" style="font-size: 0.85rem; padding: 4px 12px;">📋 کپی مجدد متن</button>
-                            <span style="font-size: 0.8rem; color: #10b981; display: none;" id="copySuccessNotice">✓ در کلیپ‌بورد کپی شد</span>
-                        </div>
-                    </div>
-
-                    <!-- Import Area (replaces prompt) -->
-                    <div style="margin-top: 14px; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 12px;">
-                        <label for="syncCodeImportArea" style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 6px; color: var(--text-primary);">
-                            📥 اگر کُد انتقال را از دستگاه دیگر دریافت کرده‌اید، در کادر زیر Paste کنید:
-                        </label>
-                        <textarea id="syncCodeImportArea" rows="3" placeholder="کُد انتقال شروع‌شونده با WEARWISE:... را اینجا جای‌گذاری کنید" style="width: 100%; border-radius: 8px; font-family: monospace; font-size: 0.8rem; padding: 8px; background: rgba(15, 23, 42, 0.7); color: #e2e8f0; border: 1px solid var(--border-color); direction: ltr; resize: vertical; box-sizing: border-box;"></textarea>
-                        <button type="button" id="applySyncCodeBtn" class="btn-primary" style="width: 100%; margin-top: 8px;">
-                            <span>✨ اعمال کمد و انتقال تمام تصاویر به این دستگاه</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Section 3: Offline Backup (JSON) -->
-                <div class="sync-box">
-                    <div class="sync-box-header">
-                        <span class="box-icon">💾</span>
-                        <h4>پشتیبان‌گیری آفلاین (فایل کمد)</h4>
-                    </div>
-                    <p class="sync-box-desc">
-                        می‌توانید کمد و تنظیمات خود را به صورت فایل ذخیره کرده و در هر دیوایسی بارگذاری کنید (۱۰۰٪ آفلاین و بدون نیاز به اینترنت):
-                    </p>
-                    <div class="sync-actions-row">
-                        <button type="button" id="exportBackupBtn" class="btn-secondary">
-                            <span>💾 دانلود فایل پشتیبان (JSON)</span>
-                        </button>
-                        <button type="button" id="importBackupBtn" class="btn-secondary">
-                            <span>📂 بازیابی از فایل پشتیبان</span>
-                        </button>
-                        <input type="file" id="importBackupFile" accept=".json" style="display: none;" />
                     </div>
                 </div>
             </div>
