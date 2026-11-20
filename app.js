@@ -1,3 +1,19 @@
+// Normalizes Persian and Arabic letters, diacritics and spaces
+function normalizePersianText(str) {
+    if (!str || typeof str !== 'string') return '';
+    return str
+        .trim()
+        .toLowerCase()
+        .replace(/[​‌‍﻿]/g, '')
+        .replace(/[ي]/g, 'ی')
+        .replace(/[ك]/g, 'ک')
+        .replace(/[آأإ]/g, 'ا')
+        .replace(/[ة]/g, 'ه')
+        .replace(/[ؤ]/g, 'و')
+        .replace(/[ًٌٍَُِّ]/g, '')
+        .replace(/\s+/g, ' ');
+}
+
 /**
  * WearWise AI - Frontend Application
  * Multilingual, Multi-Theme, Profile-Aware & Destination-Driven Smart Outfit Advisor
@@ -596,24 +612,808 @@ function isStaticHost() {
     );
 }
 
+// Comprehensive Iranian Cities & Global Hubs Database
 const STATIC_CITIES_TABLE = [
-    { name: "تهران", name_en: "Tehran", country: "ایران", admin1: "استان تهران", lat: 35.69439, lon: 51.42151, latitude: 35.69439, longitude: 51.42151 },
-    { name: "مشهد", name_en: "Mashhad", country: "ایران", admin1: "خراسان رضوی", lat: 36.2970, lon: 59.6062, latitude: 36.2970, longitude: 59.6062 },
-    { name: "اصفهان", name_en: "Isfahan", country: "ایران", admin1: "اصفهان", lat: 32.6546, lon: 51.6680, latitude: 32.6546, longitude: 51.6680 },
-    { name: "شیراز", name_en: "Shiraz", country: "ایران", admin1: "فارس", lat: 29.5918, lon: 52.5837, latitude: 29.5918, longitude: 52.5837 },
-    { name: "تبریز", name_en: "Tabriz", country: "ایران", admin1: "آذربایجان شرقی", lat: 38.0800, lon: 46.2919, latitude: 38.0800, longitude: 46.2919 },
-    { name: "کرج", name_en: "Karaj", country: "ایران", admin1: "البرز", lat: 35.8327, lon: 50.9915, latitude: 35.8327, longitude: 50.9915 },
-    { name: "رشت", name_en: "Rasht", country: "ایران", admin1: "گیلان", lat: 37.2808, lon: 49.5832, latitude: 37.2808, longitude: 49.5832 },
-    { name: "اهواز", name_en: "Ahvaz", country: "ایران", admin1: "خوزستان", lat: 31.3183, lon: 48.6706, latitude: 31.3183, longitude: 48.6706 },
-    { name: "قم", name_en: "Qom", country: "ایران", admin1: "قم", lat: 34.6401, lon: 50.8764, latitude: 34.6401, longitude: 50.8764 },
-    { name: "کرمانشاه", name_en: "Kermanshah", country: "ایران", admin1: "کرمانشاه", lat: 34.3142, lon: 47.0650, latitude: 34.3142, longitude: 47.0650 },
-    { name: "ارومیه", name_en: "Urmia", country: "ایران", admin1: "آذربایجان غربی", lat: 37.5527, lon: 45.0761, latitude: 37.5527, longitude: 45.0761 },
-    { name: "یزد", name_en: "Yazd", country: "ایران", admin1: "یزد", lat: 31.8974, lon: 54.3569, latitude: 31.8974, longitude: 54.3569 },
-    { name: "کیش", name_en: "Kish", country: "ایران", admin1: "هرمزگان", lat: 26.5578, lon: 54.0194, latitude: 26.5578, longitude: 54.0194 },
-    { name: "استانبول", name_en: "Istanbul", country: "ترکیه", admin1: "استانبول", lat: 41.0082, lon: 28.9784, latitude: 41.0082, longitude: 28.9784 },
-    { name: "دبی", name_en: "Dubai", country: "امارات", admin1: "دبی", lat: 25.2048, lon: 55.2708, latitude: 25.2048, longitude: 55.2708 },
-    { name: "لندن", name_en: "London", country: "بریتانیا", admin1: "انگلستان", lat: 51.5074, lon: -0.1278, latitude: 51.5074, longitude: -0.1278 },
-    { name: "پاریس", name_en: "Paris", country: "فرانسه", admin1: "ایل-دو-فرانس", lat: 48.8566, lon: 2.3522, latitude: 48.8566, longitude: 2.3522 }
+    {
+        "name": "تهران",
+        "name_en": "Tehran",
+        "country": "ایران",
+        "admin1": "استان تهران",
+        "latitude": 35.69439,
+        "longitude": 51.42151,
+        "lat": 35.69439,
+        "lon": 51.42151
+    },
+    {
+        "name": "مشهد",
+        "name_en": "Mashhad",
+        "country": "ایران",
+        "admin1": "خراسان رضوی",
+        "latitude": 36.297,
+        "longitude": 59.6062,
+        "lat": 36.297,
+        "lon": 59.6062
+    },
+    {
+        "name": "اصفهان",
+        "name_en": "Isfahan",
+        "country": "ایران",
+        "admin1": "اصفهان",
+        "latitude": 32.6546,
+        "longitude": 51.668,
+        "lat": 32.6546,
+        "lon": 51.668
+    },
+    {
+        "name": "شیراز",
+        "name_en": "Shiraz",
+        "country": "ایران",
+        "admin1": "فارس",
+        "latitude": 29.5918,
+        "longitude": 52.5837,
+        "lat": 29.5918,
+        "lon": 52.5837
+    },
+    {
+        "name": "تبریز",
+        "name_en": "Tabriz",
+        "country": "ایران",
+        "admin1": "آذربایجان شرقی",
+        "latitude": 38.08,
+        "longitude": 46.2919,
+        "lat": 38.08,
+        "lon": 46.2919
+    },
+    {
+        "name": "کرج",
+        "name_en": "Karaj",
+        "country": "ایران",
+        "admin1": "البرز",
+        "latitude": 35.8327,
+        "longitude": 50.9915,
+        "lat": 35.8327,
+        "lon": 50.9915
+    },
+    {
+        "name": "رشت",
+        "name_en": "Rasht",
+        "country": "ایران",
+        "admin1": "گیلان",
+        "latitude": 37.2808,
+        "longitude": 49.5832,
+        "lat": 37.2808,
+        "lon": 49.5832
+    },
+    {
+        "name": "اهواز",
+        "name_en": "Ahvaz",
+        "country": "ایران",
+        "admin1": "خوزستان",
+        "latitude": 31.3183,
+        "longitude": 48.6706,
+        "lat": 31.3183,
+        "lon": 48.6706
+    },
+    {
+        "name": "قم",
+        "name_en": "Qom",
+        "country": "ایران",
+        "admin1": "قم",
+        "latitude": 34.6401,
+        "longitude": 50.8764,
+        "lat": 34.6401,
+        "lon": 50.8764
+    },
+    {
+        "name": "کرمانشاه",
+        "name_en": "Kermanshah",
+        "country": "ایران",
+        "admin1": "کرمانشاه",
+        "latitude": 34.3142,
+        "longitude": 47.065,
+        "lat": 34.3142,
+        "lon": 47.065
+    },
+    {
+        "name": "ارومیه",
+        "name_en": "Urmia",
+        "country": "ایران",
+        "admin1": "آذربایجان غربی",
+        "latitude": 37.5527,
+        "longitude": 45.0761,
+        "lat": 37.5527,
+        "lon": 45.0761
+    },
+    {
+        "name": "یزد",
+        "name_en": "Yazd",
+        "country": "ایران",
+        "admin1": "یزد",
+        "latitude": 31.8974,
+        "longitude": 54.3569,
+        "lat": 31.8974,
+        "lon": 54.3569
+    },
+    {
+        "name": "زاهدان",
+        "name_en": "Zahedan",
+        "country": "ایران",
+        "admin1": "سیستان و بلوچستان",
+        "latitude": 29.4963,
+        "longitude": 60.8629,
+        "lat": 29.4963,
+        "lon": 60.8629
+    },
+    {
+        "name": "همدان",
+        "name_en": "Hamadan",
+        "country": "ایران",
+        "admin1": "همدان",
+        "latitude": 34.7989,
+        "longitude": 48.515,
+        "lat": 34.7989,
+        "lon": 48.515
+    },
+    {
+        "name": "کرمان",
+        "name_en": "Kerman",
+        "country": "ایران",
+        "admin1": "کرمان",
+        "latitude": 30.2839,
+        "longitude": 57.0788,
+        "lat": 30.2839,
+        "lon": 57.0788
+    },
+    {
+        "name": "اردبیل",
+        "name_en": "Ardabil",
+        "country": "ایران",
+        "admin1": "اردبیل",
+        "latitude": 38.2498,
+        "longitude": 48.2933,
+        "lat": 38.2498,
+        "lon": 48.2933
+    },
+    {
+        "name": "بندرعباس",
+        "name_en": "Bandar Abbas",
+        "country": "ایران",
+        "admin1": "هرمزگان",
+        "latitude": 27.1832,
+        "longitude": 56.2666,
+        "lat": 27.1832,
+        "lon": 56.2666
+    },
+    {
+        "name": "اراک",
+        "name_en": "Arak",
+        "country": "ایران",
+        "admin1": "مرکزی",
+        "latitude": 34.0917,
+        "longitude": 49.6892,
+        "lat": 34.0917,
+        "lon": 49.6892
+    },
+    {
+        "name": "زنجان",
+        "name_en": "Zanjan",
+        "country": "ایران",
+        "admin1": "زنجان",
+        "latitude": 36.6736,
+        "longitude": 48.4787,
+        "lat": 36.6736,
+        "lon": 48.4787
+    },
+    {
+        "name": "سنندج",
+        "name_en": "Sanandaj",
+        "country": "ایران",
+        "admin1": "کردستان",
+        "latitude": 35.3219,
+        "longitude": 46.9862,
+        "lat": 35.3219,
+        "lon": 46.9862
+    },
+    {
+        "name": "قزوین",
+        "name_en": "Qazvin",
+        "country": "ایران",
+        "admin1": "قزوین",
+        "latitude": 36.2688,
+        "longitude": 50.0041,
+        "lat": 36.2688,
+        "lon": 50.0041
+    },
+    {
+        "name": "خرم‌آباد",
+        "name_en": "Khorramabad",
+        "country": "ایران",
+        "admin1": "لرستان",
+        "latitude": 33.4878,
+        "longitude": 48.3558,
+        "lat": 33.4878,
+        "lon": 48.3558
+    },
+    {
+        "name": "گرگان",
+        "name_en": "Gorgan",
+        "country": "ایران",
+        "admin1": "گلستان",
+        "latitude": 36.8427,
+        "longitude": 54.4439,
+        "lat": 36.8427,
+        "lon": 54.4439
+    },
+    {
+        "name": "ساری",
+        "name_en": "Sari",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.5633,
+        "longitude": 53.0601,
+        "lat": 36.5633,
+        "lon": 53.0601
+    },
+    {
+        "name": "بجنورد",
+        "name_en": "Bojnurd",
+        "country": "ایران",
+        "admin1": "خراسان شمالی",
+        "latitude": 37.4747,
+        "longitude": 57.329,
+        "lat": 37.4747,
+        "lon": 57.329
+    },
+    {
+        "name": "بوشهر",
+        "name_en": "Bushehr",
+        "country": "ایران",
+        "admin1": "بوشهر",
+        "latitude": 28.9234,
+        "longitude": 50.8203,
+        "lat": 28.9234,
+        "lon": 50.8203
+    },
+    {
+        "name": "بیرجند",
+        "name_en": "Birjand",
+        "country": "ایران",
+        "admin1": "خراسان جنوبی",
+        "latitude": 32.8663,
+        "longitude": 59.2211,
+        "lat": 32.8663,
+        "lon": 59.2211
+    },
+    {
+        "name": "ایلام",
+        "name_en": "Ilam",
+        "country": "ایران",
+        "admin1": "ایلام",
+        "latitude": 33.6374,
+        "longitude": 46.4227,
+        "lat": 33.6374,
+        "lon": 46.4227
+    },
+    {
+        "name": "شهرکرد",
+        "name_en": "Shahrekord",
+        "country": "ایران",
+        "admin1": "چهارمحال و بختیاری",
+        "latitude": 32.3256,
+        "longitude": 50.8644,
+        "lat": 32.3256,
+        "lon": 50.8644
+    },
+    {
+        "name": "سمنان",
+        "name_en": "Semnan",
+        "country": "ایران",
+        "admin1": "سمنان",
+        "latitude": 35.5769,
+        "longitude": 53.397,
+        "lat": 35.5769,
+        "lon": 53.397
+    },
+    {
+        "name": "یاسوج",
+        "name_en": "Yasuj",
+        "country": "ایران",
+        "admin1": "کهگیلویه و بویراحمد",
+        "latitude": 30.6684,
+        "longitude": 51.5876,
+        "lat": 30.6684,
+        "lon": 51.5876
+    },
+    {
+        "name": "کیش",
+        "name_en": "Kish",
+        "country": "ایران",
+        "admin1": "هرمزگان",
+        "latitude": 26.5578,
+        "longitude": 54.0194,
+        "lat": 26.5578,
+        "lon": 54.0194
+    },
+    {
+        "name": "قشم",
+        "name_en": "Qeshm",
+        "country": "ایران",
+        "admin1": "هرمزگان",
+        "latitude": 26.9581,
+        "longitude": 56.2719,
+        "lat": 26.9581,
+        "lon": 56.2719
+    },
+    {
+        "name": "کاشان",
+        "name_en": "Kashan",
+        "country": "ایران",
+        "admin1": "اصفهان",
+        "latitude": 33.985,
+        "longitude": 51.41,
+        "lat": 33.985,
+        "lon": 51.41
+    },
+    {
+        "name": "نیشابور",
+        "name_en": "Neyshabur",
+        "country": "ایران",
+        "admin1": "خراسان رضوی",
+        "latitude": 36.2133,
+        "longitude": 58.7958,
+        "lat": 36.2133,
+        "lon": 58.7958
+    },
+    {
+        "name": "بابل",
+        "name_en": "Babol",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.5513,
+        "longitude": 52.6789,
+        "lat": 36.5513,
+        "lon": 52.6789
+    },
+    {
+        "name": "آمل",
+        "name_en": "Amol",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.4696,
+        "longitude": 52.3507,
+        "lat": 36.4696,
+        "lon": 52.3507
+    },
+    {
+        "name": "لاهیجان",
+        "name_en": "Lahijan",
+        "country": "ایران",
+        "admin1": "گیلان",
+        "latitude": 37.207,
+        "longitude": 50.0034,
+        "lat": 37.207,
+        "lon": 50.0034
+    },
+    {
+        "name": "انزلی",
+        "name_en": "Bandar Anzali",
+        "country": "ایران",
+        "admin1": "گیلان",
+        "latitude": 37.4747,
+        "longitude": 49.4622,
+        "lat": 37.4747,
+        "lon": 49.4622
+    },
+    {
+        "name": "چالوس",
+        "name_en": "Chaloos",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.655,
+        "longitude": 51.4204,
+        "lat": 36.655,
+        "lon": 51.4204
+    },
+    {
+        "name": "رامسر",
+        "name_en": "Ramsar",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.9174,
+        "longitude": 50.6681,
+        "lat": 36.9174,
+        "lon": 50.6681
+    },
+    {
+        "name": "نوشهر",
+        "name_en": "Nowshahr",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.6496,
+        "longitude": 51.496,
+        "lat": 36.6496,
+        "lon": 51.496
+    },
+    {
+        "name": "آستارا",
+        "name_en": "Astara",
+        "country": "ایران",
+        "admin1": "گیلان",
+        "latitude": 38.4294,
+        "longitude": 48.8719,
+        "lat": 38.4294,
+        "lon": 48.8719
+    },
+    {
+        "name": "آبادان",
+        "name_en": "Abadan",
+        "country": "ایران",
+        "admin1": "خوزستان",
+        "latitude": 30.3392,
+        "longitude": 48.3043,
+        "lat": 30.3392,
+        "lon": 48.3043
+    },
+    {
+        "name": "دزفول",
+        "name_en": "Dezful",
+        "country": "ایران",
+        "admin1": "خوزستان",
+        "latitude": 32.3811,
+        "longitude": 48.4058,
+        "lat": 32.3811,
+        "lon": 48.4058
+    },
+    {
+        "name": "بروجرد",
+        "name_en": "Borujerd",
+        "country": "ایران",
+        "admin1": "لرستان",
+        "latitude": 33.8973,
+        "longitude": 48.7516,
+        "lat": 33.8973,
+        "lon": 48.7516
+    },
+    {
+        "name": "ساوه",
+        "name_en": "Saveh",
+        "country": "ایران",
+        "admin1": "مرکزی",
+        "latitude": 35.0213,
+        "longitude": 50.3566,
+        "lat": 35.0213,
+        "lon": 50.3566
+    },
+    {
+        "name": "شاهرود",
+        "name_en": "Shahroud",
+        "country": "ایران",
+        "admin1": "سمنان",
+        "latitude": 36.4182,
+        "longitude": 54.9763,
+        "lat": 36.4182,
+        "lon": 54.9763
+    },
+    {
+        "name": "سبزوار",
+        "name_en": "Sabzevar",
+        "country": "ایران",
+        "admin1": "خراسان رضوی",
+        "latitude": 36.2126,
+        "longitude": 57.6789,
+        "lat": 36.2126,
+        "lon": 57.6789
+    },
+    {
+        "name": "مراغه",
+        "name_en": "Maragheh",
+        "country": "ایران",
+        "admin1": "آذربایجان شرقی",
+        "latitude": 37.3917,
+        "longitude": 46.2392,
+        "lat": 37.3917,
+        "lon": 46.2392
+    },
+    {
+        "name": "مهاباد",
+        "name_en": "Mahabad",
+        "country": "ایران",
+        "admin1": "آذربایجان غربی",
+        "latitude": 36.7631,
+        "longitude": 45.7222,
+        "lat": 36.7631,
+        "lon": 45.7222
+    },
+    {
+        "name": "خوی",
+        "name_en": "Khoy",
+        "country": "ایران",
+        "admin1": "آذربایجان غربی",
+        "latitude": 38.5503,
+        "longitude": 44.9525,
+        "lat": 38.5503,
+        "lon": 44.9525
+    },
+    {
+        "name": "رفسنجان",
+        "name_en": "Rafsanjan",
+        "country": "ایران",
+        "admin1": "کرمان",
+        "latitude": 30.4067,
+        "longitude": 55.9939,
+        "lat": 30.4067,
+        "lon": 55.9939
+    },
+    {
+        "name": "سیرجان",
+        "name_en": "Sirjan",
+        "country": "ایران",
+        "admin1": "کرمان",
+        "latitude": 29.452,
+        "longitude": 55.6814,
+        "lat": 29.452,
+        "lon": 55.6814
+    },
+    {
+        "name": "چابهار",
+        "name_en": "Chabahar",
+        "country": "ایران",
+        "admin1": "سیستان و بلوچستان",
+        "latitude": 25.2919,
+        "longitude": 60.643,
+        "lat": 25.2919,
+        "lon": 60.643
+    },
+    {
+        "name": "سقز",
+        "name_en": "Saqqez",
+        "country": "ایران",
+        "admin1": "کردستان",
+        "latitude": 36.2499,
+        "longitude": 46.2733,
+        "lat": 36.2499,
+        "lon": 46.2733
+    },
+    {
+        "name": "مریوان",
+        "name_en": "Marivan",
+        "country": "ایران",
+        "admin1": "کردستان",
+        "latitude": 35.5269,
+        "longitude": 46.176,
+        "lat": 35.5269,
+        "lon": 46.176
+    },
+    {
+        "name": "بانه",
+        "name_en": "Baneh",
+        "country": "ایران",
+        "admin1": "کردستان",
+        "latitude": 35.9975,
+        "longitude": 45.8853,
+        "lat": 35.9975,
+        "lon": 45.8853
+    },
+    {
+        "name": "بوکان",
+        "name_en": "Bukan",
+        "country": "ایران",
+        "admin1": "آذربایجان غربی",
+        "latitude": 36.5208,
+        "longitude": 46.2089,
+        "lat": 36.5208,
+        "lon": 46.2089
+    },
+    {
+        "name": "تنکابن",
+        "name_en": "Tonekabon",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.8163,
+        "longitude": 50.8738,
+        "lat": 36.8163,
+        "lon": 50.8738
+    },
+    {
+        "name": "قائم‌شهر",
+        "name_en": "Qaem Shahr",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.4639,
+        "longitude": 52.8597,
+        "lat": 36.4639,
+        "lon": 52.8597
+    },
+    {
+        "name": "بابلسر",
+        "name_en": "Babolsar",
+        "country": "ایران",
+        "admin1": "مازندران",
+        "latitude": 36.7024,
+        "longitude": 52.6578,
+        "lat": 36.7024,
+        "lon": 52.6578
+    },
+    {
+        "name": "گنبد کاووس",
+        "name_en": "Gonbad-e Kavus",
+        "country": "ایران",
+        "admin1": "گلستان",
+        "latitude": 37.25,
+        "longitude": 55.1672,
+        "lat": 37.25,
+        "lon": 55.1672
+    },
+    {
+        "name": "لنگرود",
+        "name_en": "Langerud",
+        "country": "ایران",
+        "admin1": "گیلان",
+        "latitude": 37.197,
+        "longitude": 50.1536,
+        "lat": 37.197,
+        "lon": 50.1536
+    },
+    {
+        "name": "دماوند",
+        "name_en": "Damavand",
+        "country": "ایران",
+        "admin1": "تهران",
+        "latitude": 35.7178,
+        "longitude": 52.065,
+        "lat": 35.7178,
+        "lon": 52.065
+    },
+    {
+        "name": "شهریار",
+        "name_en": "Shahriar",
+        "country": "ایران",
+        "admin1": "تهران",
+        "latitude": 35.6597,
+        "longitude": 51.0592,
+        "lat": 35.6597,
+        "lon": 51.0592
+    },
+    {
+        "name": "اسلامشهر",
+        "name_en": "Eslamshahr",
+        "country": "ایران",
+        "admin1": "تهران",
+        "latitude": 35.5392,
+        "longitude": 51.2349,
+        "lat": 35.5392,
+        "lon": 51.2349
+    },
+    {
+        "name": "ورامین",
+        "name_en": "Varamin",
+        "country": "ایران",
+        "admin1": "تهران",
+        "latitude": 35.3242,
+        "longitude": 51.6464,
+        "lat": 35.3242,
+        "lon": 51.6464
+    },
+    {
+        "name": "نجف‌آباد",
+        "name_en": "Najafabad",
+        "country": "ایران",
+        "admin1": "اصفهان",
+        "latitude": 32.6341,
+        "longitude": 51.3667,
+        "lat": 32.6341,
+        "lon": 51.3667
+    },
+    {
+        "name": "شاهین‌شهر",
+        "name_en": "Shahin Shahr",
+        "country": "ایران",
+        "admin1": "اصفهان",
+        "latitude": 32.8647,
+        "longitude": 51.5475,
+        "lat": 32.8647,
+        "lon": 51.5475
+    },
+    {
+        "name": "استانبول",
+        "name_en": "Istanbul",
+        "country": "ترکیه",
+        "admin1": "استانبول",
+        "latitude": 41.0082,
+        "longitude": 28.9784,
+        "lat": 41.0082,
+        "lon": 28.9784
+    },
+    {
+        "name": "دبی",
+        "name_en": "Dubai",
+        "country": "امارات",
+        "admin1": "دبی",
+        "latitude": 25.2048,
+        "longitude": 55.2708,
+        "lat": 25.2048,
+        "lon": 55.2708
+    },
+    {
+        "name": "باکو",
+        "name_en": "Baku",
+        "country": "جمهوری آذربایجان",
+        "admin1": "باکو",
+        "latitude": 40.4093,
+        "longitude": 49.8671,
+        "lat": 40.4093,
+        "lon": 49.8671
+    },
+    {
+        "name": "تفلیس",
+        "name_en": "Tbilisi",
+        "country": "گرجستان",
+        "admin1": "تفلیس",
+        "latitude": 41.7151,
+        "longitude": 44.8271,
+        "lat": 41.7151,
+        "lon": 44.8271
+    },
+    {
+        "name": "ایروان",
+        "name_en": "Yerevan",
+        "country": "ارمنستان",
+        "admin1": "ایروان",
+        "latitude": 40.1792,
+        "longitude": 44.4991,
+        "lat": 40.1792,
+        "lon": 44.4991
+    },
+    {
+        "name": "لندن",
+        "name_en": "London",
+        "country": "بریتانیا",
+        "admin1": "انگلستان",
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "lat": 51.5074,
+        "lon": -0.1278
+    },
+    {
+        "name": "پاریس",
+        "name_en": "Paris",
+        "country": "فرانسه",
+        "admin1": "ایل-دو-فرانس",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "lat": 48.8566,
+        "lon": 2.3522
+    },
+    {
+        "name": "نیویورک",
+        "name_en": "New York",
+        "country": "آمریکا",
+        "admin1": "نیویورک",
+        "latitude": 40.7128,
+        "longitude": -74.006,
+        "lat": 40.7128,
+        "lon": -74.006
+    },
+    {
+        "name": "تورنتو",
+        "name_en": "Toronto",
+        "country": "کانادا",
+        "admin1": "انتاریو",
+        "latitude": 43.6532,
+        "longitude": -79.3832,
+        "lat": 43.6532,
+        "lon": -79.3832
+    },
+    {
+        "name": "برلین",
+        "name_en": "Berlin",
+        "country": "آلمان",
+        "admin1": "برلین",
+        "latitude": 52.52,
+        "longitude": 13.405,
+        "lat": 52.52,
+        "lon": 13.405
+    }
 ];
 
 function decodeWmoCodeClientSide(code) {
@@ -3837,9 +4637,11 @@ function resetPhotoUpload() {
 function setupCityAutocomplete() {
     let debounceTimer;
     let selectedIdx = -1;
+    let abortController = null;
 
     const hideDropdown = () => {
         DOM.cityDropdown.style.display = 'none';
+        DOM.cityDropdown.innerHTML = '';
         selectedIdx = -1;
     };
 
@@ -3853,32 +4655,101 @@ function setupCityAutocomplete() {
         }
 
         debounceTimer = setTimeout(async () => {
-            let cities = null;
+            const normQuery = normalizePersianText(query);
+            const qLower = query.toLowerCase();
+
+            // 1. Instant local search from 80+ Iranian cities (0ms latency)
+            const localMatches = STATIC_CITIES_TABLE.filter(c => {
+                const normName = normalizePersianText(c.name);
+                const normAdmin = normalizePersianText(c.admin1 || '');
+                const normCountry = normalizePersianText(c.country || '');
+                const enName = (c.name_en || '').toLowerCase();
+                return (
+                    normName.includes(normQuery) ||
+                    normQuery.includes(normName) ||
+                    enName.includes(qLower) ||
+                    normAdmin.includes(normQuery) ||
+                    normCountry.includes(normQuery)
+                );
+            });
+
+            // Show local matches immediately
+            if (localMatches.length > 0) {
+                renderCityDropdown(localMatches.slice(0, 10));
+            }
+
+            // 2. Parallel Live Geocoding from Open-Meteo in Persian
             try {
+                if (abortController) abortController.abort();
+                abortController = new AbortController();
+
+                let liveResults = [];
+
                 if (!isStaticHost()) {
-                    const res = await fetch(`/api/cities?q=${encodeURIComponent(query)}`);
+                    try {
+                        const res = await fetch(`/api/cities?q=${encodeURIComponent(query)}`, {
+                            signal: abortController.signal
+                        });
+                        if (res.ok) {
+                            liveResults = await res.json();
+                        }
+                    } catch (_) {}
+                }
+
+                if (liveResults.length === 0) {
+                    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=fa&format=json`;
+                    const res = await fetch(geoUrl, { signal: abortController.signal });
                     if (res.ok) {
-                        cities = await res.json();
+                        const geoData = await res.json();
+                        if (geoData.results && Array.isArray(geoData.results)) {
+                            liveResults = geoData.results.map(r => ({
+                                name: r.name,
+                                name_en: r.name,
+                                country: r.country || 'ایران',
+                                admin1: r.admin1 || '',
+                                latitude: r.latitude,
+                                longitude: r.longitude,
+                                lat: r.latitude,
+                                lon: r.longitude
+                            }));
+                        }
                     }
                 }
-            } catch (_) {}
 
-            if (!cities || cities.length === 0) {
-                const qLower = query.toLowerCase();
-                cities = STATIC_CITIES_TABLE.filter(c => 
-                    c.name.includes(query) || 
-                    c.name_en.toLowerCase().includes(qLower) || 
-                    (c.country && c.country.includes(query)) ||
-                    (c.admin1 && c.admin1.includes(query))
-                );
+                // 3. Merge & Deduplicate
+                const merged = [...localMatches];
+                for (const live of liveResults) {
+                    const lat = live.latitude ?? live.lat;
+                    const lon = live.longitude ?? live.lon;
+                    if (lat !== undefined && lon !== undefined) {
+                        const isDup = merged.some(m => {
+                            const mLat = m.latitude ?? m.lat;
+                            const mLon = m.longitude ?? m.lon;
+                            return Math.abs(mLat - lat) < 0.04 && Math.abs(mLon - lon) < 0.04;
+                        });
+                        if (!isDup) {
+                            merged.push(live);
+                        }
+                    }
+                }
+
+                renderCityDropdown(merged.slice(0, 12));
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.warn('City search note:', err);
+                }
             }
-            renderCityDropdown(cities);
-        }, 220);
+        }, 160);
     });
 
     function renderCityDropdown(cities) {
         if (!cities || cities.length === 0) {
-            hideDropdown();
+            DOM.cityDropdown.innerHTML = `
+                <div class="city-dropdown-item no-result" style="cursor: default; opacity: 0.7; justify-content: center; padding: 10px;">
+                    <span>🔍 شهری با این نام یافت نشد. دکمه Enter را بزنید.</span>
+                </div>
+            `;
+            DOM.cityDropdown.style.display = 'block';
             return;
         }
 
@@ -3888,13 +4759,16 @@ function setupCityAutocomplete() {
             itemEl.className = 'city-dropdown-item';
             itemEl.setAttribute('data-idx', idx);
 
+            const displayName = city.name || 'شهر';
+            const subLabel = city.admin1 ? city.admin1 : (city.name_en && city.name_en !== city.name ? city.name_en : '');
+            const countryBadge = city.country || 'ایران';
+
             itemEl.innerHTML = `
                 <div class="city-main-info">
-                    <span class="city-name-txt">${city.name}</span>
-                    <span class="city-meta-txt">${city.name_en !== city.name ? `(${city.name_en})` : ''}</span>
-                    ${city.admin1 ? `<span class="city-meta-txt">${city.admin1}</span>` : ''}
+                    <span class="city-name-txt">${displayName}</span>
+                    ${subLabel ? `<span class="city-meta-txt">(${subLabel})</span>` : ''}
                 </div>
-                <span class="city-country-tag">${city.country}</span>
+                <span class="city-country-tag">${countryBadge}</span>
             `;
 
             itemEl.addEventListener('click', () => {
@@ -3910,11 +4784,13 @@ function setupCityAutocomplete() {
     function selectCity(city) {
         DOM.cityInput.value = city.name;
         hideDropdown();
-        fetchWeather(city.name, city.latitude, city.longitude);
+        const lat = city.latitude ?? city.lat;
+        const lon = city.longitude ?? city.lon;
+        fetchWeather(city.name, lat, lon);
     }
 
     DOM.cityInput.addEventListener('keydown', (e) => {
-        const items = DOM.cityDropdown.querySelectorAll('.city-dropdown-item');
+        const items = DOM.cityDropdown.querySelectorAll('.city-dropdown-item:not(.no-result)');
         if (DOM.cityDropdown.style.display === 'none' || items.length === 0) return;
 
         if (e.key === 'ArrowDown') {
