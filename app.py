@@ -1644,13 +1644,16 @@ def upload_clothing_photos_bulk(files: List[UploadFile] = File(...)):
     import concurrent.futures
 
     file_data_list = []
+    valid_exts = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".bmp")
     for f in files:
-        if not f.content_type.startswith("image/"):
+        ctype = (f.content_type or "").lower()
+        fname = (f.filename or "").lower()
+        if not ctype.startswith("image/") and not any(fname.endswith(ext) for ext in valid_exts):
             continue
         try:
             content = f.file.read()
             if 0 < len(content) <= 15 * 1024 * 1024:
-                file_data_list.append((f.filename, f.content_type, content))
+                file_data_list.append((f.filename or "garment.jpg", ctype or "image/jpeg", content))
         except Exception as e:
             print(f"Error reading file {f.filename}: {e}")
 
@@ -1913,7 +1916,10 @@ def upload_clothing_photo(file: UploadFile = File(...), auto_save: bool = Form(T
     """
     import concurrent.futures
 
-    if not file.content_type.startswith("image/"):
+    ctype = (file.content_type or "").lower()
+    fname = (file.filename or "").lower()
+    valid_exts = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".bmp")
+    if not ctype.startswith("image/") and not any(fname.endswith(ext) for ext in valid_exts):
         raise HTTPException(status_code=400, detail="لطفاً فقط فایل تصویری آپلود کنید.")
 
     image_bytes = file.file.read()
@@ -1932,9 +1938,9 @@ def upload_clothing_photo(file: UploadFile = File(...), auto_save: bool = Form(T
         fast_mime = "image/jpeg"
     except Exception:
         fast_bytes = image_bytes
-        fast_mime = file.content_type
+        fast_mime = ctype or "image/jpeg"
 
-    detected, gemini_used = analyze_clothing_image(image_bytes, mime_type=file.content_type, filename=file.filename)
+    detected, gemini_used = analyze_clothing_image(image_bytes, mime_type=ctype or "image/jpeg", filename=file.filename or "garment.jpg")
     detected_items = [detected]
 
     # 3. Remove background and isolate garment as clean PNG
@@ -2439,11 +2445,16 @@ def delete_history_item(history_id: int):
 # -------------------------------------------------------------
 class CloudSyncPushRequest(BaseModel):
     sync_id: str
+    gemini_api_key: Optional[str] = None
     wardrobe: Optional[List[Dict[str, Any]]] = None
     profile: Optional[Dict[str, Any]] = None
     settings: Optional[Dict[str, Any]] = None
     history: Optional[List[Dict[str, Any]]] = None
     timestamp: Optional[str] = None
+    exported_at: Optional[str] = None
+
+    class Config:
+        extra = "allow"
 
 @app.post("/api/sync/push")
 def sync_push(req: CloudSyncPushRequest):
@@ -2454,11 +2465,12 @@ def sync_push(req: CloudSyncPushRequest):
     
     payload_dict = {
         "sync_id": sync_id,
+        "gemini_api_key": req.gemini_api_key or "",
         "wardrobe": req.wardrobe or [],
         "profile": req.profile or {},
         "settings": req.settings or {},
         "history": req.history or [],
-        "timestamp": req.timestamp or datetime.now().isoformat()
+        "timestamp": req.timestamp or req.exported_at or datetime.now().isoformat()
     }
     payload_str = json.dumps(payload_dict, ensure_ascii=False)
     
@@ -2602,8 +2614,9 @@ def sync_import_full(data: Dict[str, Any]):
 # -------------------------------------------------------------
 # Static Files & Frontend Routing
 # -------------------------------------------------------------
-# Ensure static directory exists
+# Ensure static & uploads directory exists
 STATIC_DIR.mkdir(exist_ok=True)
+(STATIC_DIR / "uploads").mkdir(parents=True, exist_ok=True)
 
 # Mount static folder
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
