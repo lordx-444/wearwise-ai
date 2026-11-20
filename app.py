@@ -1499,15 +1499,12 @@ def generate_fallback_recommendations(
         if shoe: 
             from_w.append(shoe)
         else: 
-            gen_s.append("کتانی یا کفش راحت")
+            gen_s.append("کتانی سفید چرم" if is_cold else "کتانی یا کفش راحت")
 
+        # Accessory: At most one tasteful item if available in wardrobe
         acc = pick_item(accessories, acc_i)
         if acc: 
             from_w.append(acc)
-
-        for w in wardrobe_names:
-            if w not in from_w and len(from_w) < 3:
-                from_w.append(w)
 
         return {
             "name": name,
