@@ -3507,8 +3507,25 @@ async function pushToCloud(silent = false) {
         }
         updateSyncQrCode();
     } else {
+        try {
+            const payload = getSyncPayload(false);
+            const jsonStr = JSON.stringify(payload);
+            const b64 = btoa(encodeURIComponent(jsonStr).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+                return String.fromCharCode('0x' + p1);
+            }));
+            const quickCode = `WEARWISE:${b64}`;
+            if (DOM.syncCodeExportContainer && DOM.syncCodeExportArea) {
+                DOM.syncCodeExportContainer.style.display = 'block';
+                DOM.syncCodeExportArea.value = quickCode;
+                DOM.syncCodeExportArea.select();
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(quickCode);
+            }
+        } catch (_) {}
+
         if (!silent) {
-            showToast('⚠️ خطایی در اتصال به سرور رخ داد. می‌توانید از دکمه «کُد سریع انتقال» یا «فایل پشتیبان» استفاده کنید.', 'warning');
+            showToast('⚠️ سرور ابری در اینترنت فعلی مسدود است؛ «کُد سریع انتقال» به‌صورت خودکار در کلیپ‌بورد کپی شد! در گوشی از دکمه «خواندن از کلیپ‌بورد» استفاده کنید.', 'warning');
         }
     }
 }
@@ -3897,7 +3914,9 @@ function setupSyncModal() {
                     if (text && (text.startsWith('WEARWISE:') || text.startsWith('{'))) {
                         if (DOM.syncCodeImportArea) {
                             DOM.syncCodeImportArea.value = text.trim();
-                            showToast('📋 کُد انتقال با موفقیت از کلیپ‌بورد جای‌گذاری شد.', 'success');
+                        }
+                        if (DOM.applySyncCodeBtn) {
+                            DOM.applySyncCodeBtn.click();
                         }
                         return;
                     }
@@ -3906,6 +3925,7 @@ function setupSyncModal() {
             if (DOM.syncCodeImportArea) {
                 DOM.syncCodeImportArea.focus();
                 DOM.syncCodeImportArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                showToast('لطفاً کُد انتقال را در کادر جای‌گذاری کرده و اعمال را بزنید.', 'info');
             }
         });
     }
