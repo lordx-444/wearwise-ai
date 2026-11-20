@@ -1883,6 +1883,125 @@ function findMatchingWardrobeItem(itemName, wardrobeList) {
     return bestMatch;
 }
 
+// ============================================================
+// Intelligent Wardrobe Item Classification & Sanitizer Engine
+// ============================================================
+function classifyGarmentItem(name) {
+    const n = (name || '').toLowerCase();
+    if (['ساعت', 'عینک', 'کلاه', 'شال', 'دستبند', 'کیف', 'کمربند', 'گردنبند'].some(k => n.includes(k))) {
+        return 'ACCESSORY';
+    }
+    if (['کفش', 'کتانی', 'بوت', 'نیم‌بوت', 'صندل', 'لوفر', 'اسنیکرز'].some(k => n.includes(k))) {
+        return 'SHOES';
+    }
+    if (['کاپشن', 'پالتو', 'بارانی', 'ترنچ', 'پافر', 'بادگیر', 'اورکت', 'کت تک', 'کت چرم', 'کت زمستانه'].some(k => n.includes(k))) {
+        return 'OUTERWEAR';
+    }
+    if (['شلوار', 'جین', 'کتان', 'اسلش', 'دامن', 'شلوارک', 'بگ', 'مام استایل'].some(k => n.includes(k))) {
+        return 'BOTTOM';
+    }
+    if (['پلیور', 'بافت', 'هودی', 'دورس', 'سویشرت', 'ژاکت', 'یقه اسکی', 'بلوز بافت'].some(k => n.includes(k))) {
+        return 'WARM_TOP';
+    }
+    if (['تیشرت', 'تی‌شرت', 'پلوشرت', 'پولوشرت', 'پیراهن', 'تاپ', 'بلوز', 'شومیز'].some(k => n.includes(k))) {
+        return 'BASE_TOP';
+    }
+    return 'OTHER';
+}
+
+function sanitizeOutfitsStructure(outfits, wardrobeList = null) {
+    if (!Array.isArray(outfits) || outfits.length === 0) return outfits;
+    
+    const wardrobeNames = Array.isArray(wardrobeList) ? wardrobeList.map(w => (w?.name || '').trim()) : [];
+    const wardrobeSet = new Set(wardrobeNames);
+    const gender = (state.profile?.gender || 'unisex').toLowerCase();
+
+    return outfits.map(outfit => {
+        if (!outfit || typeof outfit !== 'object') return outfit;
+        
+        const fromWSet = new Set(Array.isArray(outfit.from_wardrobe) ? outfit.from_wardrobe.map(x => (x || '').trim()) : []);
+        let items = Array.isArray(outfit.items) ? [...outfit.items] : [];
+        if (items.length === 0) {
+            items = [...(outfit.from_wardrobe || []), ...(outfit.general_suggestions || [])];
+        }
+
+        const slots = {
+            BASE_TOP: [],
+            WARM_TOP: [],
+            OUTERWEAR: [],
+            BOTTOM: [],
+            SHOES: [],
+            ACCESSORY: [],
+            OTHER: []
+        };
+
+        items.forEach(it => {
+            const cat = classifyGarmentItem(it);
+            slots[cat].push(it);
+        });
+
+        const finalItems = [];
+
+        // 1. Warm Top: At most 1 (NO TWO PULLOVERS/SWEATERS EVER)
+        let chosenWarm = null;
+        if (slots.WARM_TOP.length > 0) {
+            const wWarm = slots.WARM_TOP.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
+            chosenWarm = wWarm.length > 0 ? wWarm[0] : slots.WARM_TOP[0];
+        }
+
+        // 2. Base Top: At most 1
+        let chosenBase = null;
+        if (slots.BASE_TOP.length > 0) {
+            const wBase = slots.BASE_TOP.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
+            chosenBase = wBase.length > 0 ? wBase[0] : slots.BASE_TOP[0];
+        } else if (slots.WARM_TOP.length > 1 && !chosenBase) {
+            // If there were 2 warm tops and no base top, substitute the duplicate with an inner base layer
+            chosenBase = (gender === 'female') ? 'بلوز نخی یا شومیز' : 'پیراهن نخی زیرپلیور';
+        }
+
+        if (chosenBase) finalItems.push(chosenBase);
+        if (chosenWarm) finalItems.push(chosenWarm);
+
+        // 3. Bottom: Exactly 1
+        if (slots.BOTTOM.length > 0) {
+            const wBtm = slots.BOTTOM.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
+            finalItems.push(wBtm.length > 0 ? wBtm[0] : slots.BOTTOM[0]);
+        } else {
+            finalItems.push(gender === 'female' ? 'شلوار پارچه‌ای یا دامن شیک' : 'شلوار جین کلاسیک');
+        }
+
+        // 4. Outerwear: At most 1
+        if (slots.OUTERWEAR.length > 0) {
+            const wOut = slots.OUTERWEAR.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
+            finalItems.push(wOut.length > 0 ? wOut[0] : slots.OUTERWEAR[0]);
+        }
+
+        // 5. Shoes: Exactly 1
+        if (slots.SHOES.length > 0) {
+            const wShoe = slots.SHOES.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
+            finalItems.push(wShoe.length > 0 ? wShoe[0] : slots.SHOES[0]);
+        } else {
+            finalItems.push('کتانی راحت یا نیم‌بوت');
+        }
+
+        // 6. Accessory: At most 1
+        if (slots.ACCESSORY.length > 0) {
+            const wAcc = slots.ACCESSORY.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
+            finalItems.push(wAcc.length > 0 ? wAcc[0] : slots.ACCESSORY[0]);
+        }
+
+        const newFromW = finalItems.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
+        const newGenS = finalItems.filter(x => !newFromW.includes(x));
+
+        return {
+            ...outfit,
+            items: finalItems,
+            from_wardrobe: newFromW,
+            general_suggestions: newGenS
+        };
+    });
+}
+
 function generateClientSideRecommendations() {
     const weather = state.weather;
     const curr = weather?.current || {};
@@ -2014,7 +2133,7 @@ function generateClientSideRecommendations() {
         summary: `هوای امروز ${state.city} ${curr.description} با دمای حدود ${temp}°C است.`,
         reason: `طراحی شده ویژه مقصد (${dest}) و استایل ${state.style}. این ست‌ها با اولویت قطعی لباس‌های موجود در کمد شخصی شما چیده شده‌اند.`,
         umbrella: isRain,
-        outfits: outfits,
+        outfits: sanitizeOutfitsStructure(outfits, wardrobe),
         history_id: Date.now()
     };
 }
@@ -2258,8 +2377,9 @@ ${wardrobeText}
    - دقیقاً ۱ جفت کفش (کتانی، نیم‌بوت یا کفش چرم)
    - در صورت هوای سرد یا بارانی (دمای کمتر از ۱۵ درجه)، حداکثر ۱ عدد روپوش (کاپشن، پالتو یا بارانی)
    - حداکثر ۱ عدد اکسسوری متناسب (مانند ساعت مچی یا عینک)
-۲. خط قرمزهای مد و استایل:
-   - به هیچ وجه نباید در یک ست دو کاپشن یا دو شلوار قرار گیرد!
+۲. خط قرمزهای مد و استایل (ممنوعیت‌های قطعی):
+   - به هیچ وجه و تحت هیچ شرایطی نباید دو تا پلیور، دو تا بافت، یا یک پلیور و یک هودی باهم در یک ست قرار گیرند! هر ست حداکثر ۱ بالاتنه گرم (فقط ۱ پلیور یا ۱ هودی) دارد.
+   - به هیچ وجه نباید در یک ست دو کاپشن، دو پالتو یا دو شلوار قرار گیرد!
    - هرگز نباید ستی بدون شلوار یا بدون کفش پیشنهاد داده شود!
    - هرگز نباید ستی بدون لباس اصلی و صرفاً از اکسسوری (مثلاً ساعت خالی) ساخته شود!
 ۳. اگر در کمد شخصی کاربر برای بخش‌هایی (مانند شلوار یا کفش) لباسی وجود ندارد، حتماً یک آیتم تکمیلی بسیار شیک، استاندارد و متناسب با سن ${ageGroupLabel} و رنگ لباس‌های کمد او در general_suggestions پیشنهاد دهید تا ست ۱۰۰٪ کامل شود.
@@ -2357,6 +2477,9 @@ async function generateRecommendations(isAlternative = false) {
 
             if (res.ok) {
                 const data = await res.json();
+                if (data && Array.isArray(data.outfits)) {
+                    data.outfits = sanitizeOutfitsStructure(data.outfits, state.wardrobe);
+                }
                 state.currentRecommendations = data;
                 renderRecommendations(data);
                 showToast(isAlternative ? 'ست‌های پیشنهادی تازه با موفقیت ایجاد شدند!' : 'پیشنهادات ست لباس آماده شد!', 'success');
@@ -2373,6 +2496,7 @@ async function generateRecommendations(isAlternative = false) {
         try {
             const aiRec = await callGeminiRecommendationClientSide(apiKey.trim());
             if (aiRec && aiRec.outfits && aiRec.outfits.length > 0) {
+                aiRec.outfits = sanitizeOutfitsStructure(aiRec.outfits, state.wardrobe);
                 state.currentRecommendations = aiRec;
                 renderRecommendations(aiRec);
                 saveLocalHistory(aiRec);
@@ -2569,6 +2693,10 @@ function setupMannequinModal() {
 }
 
 function renderRecommendations(data) {
+    if (!data) return;
+    if (Array.isArray(data.outfits)) {
+        data.outfits = sanitizeOutfitsStructure(data.outfits, state.wardrobe);
+    }
     const t = I18N[state.lang] || I18N.fa;
 
     // 1. Render Summary Card
