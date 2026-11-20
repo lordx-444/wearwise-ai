@@ -482,6 +482,12 @@ const DOM = {
     importBackupFile: document.getElementById('importBackupFile'),
     copySyncCodeBtn: document.getElementById('copySyncCodeBtn'),
     pasteSyncCodeBtn: document.getElementById('pasteSyncCodeBtn'),
+    syncCodeExportContainer: document.getElementById('syncCodeExportContainer'),
+    syncCodeExportArea: document.getElementById('syncCodeExportArea'),
+    copyExportedCodeBtn: document.getElementById('copyExportedCodeBtn'),
+    copySuccessNotice: document.getElementById('copySuccessNotice'),
+    syncCodeImportArea: document.getElementById('syncCodeImportArea'),
+    applySyncCodeBtn: document.getElementById('applySyncCodeBtn'),
 
     // Loading & Toast
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -1549,11 +1555,29 @@ function getInitialWardrobeSeed() {
     ];
 }
 
+function safeSetLocalWardrobe(items) {
+    if (!Array.isArray(items)) return;
+    try {
+        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(items));
+    } catch (e) {
+        console.warn('localStorage quota reached, optimizing image sizes:', e);
+        try {
+            const optimized = items.map(it => ({
+                ...it,
+                image_url: (it.image_url && !it.image_url.startsWith('data:'))
+                    ? it.image_url
+                    : getGarmentFallbackImage(it.name, it.category)
+            }));
+            localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(optimized));
+        } catch (_) {}
+    }
+}
+
 function getLocalWardrobe() {
     const raw = localStorage.getItem('wearwise_wardrobe_items');
     if (!raw) {
         const seed = getInitialWardrobeSeed();
-        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(seed));
+        safeSetLocalWardrobe(seed);
         return seed;
     }
     try {
@@ -1602,10 +1626,10 @@ async function removeBackgroundFromDataUrl(dataUrl) {
         const img = new Image();
         img.onload = () => {
             try {
-                // Resize to max 380px to guarantee instant execution (15ms) and prevent memory crashes
-                const maxDim = 380;
-                let w = img.width || 380;
-                let h = img.height || 380;
+                // Resize to max 280px to guarantee instant execution (10ms) and lightweight storage
+                const maxDim = 280;
+                let w = img.width || 280;
+                let h = img.height || 280;
                 if (w > maxDim || h > maxDim) {
                     if (w > h) {
                         h = Math.round((h * maxDim) / w);
@@ -1742,8 +1766,14 @@ async function removeBackgroundFromDataUrl(dataUrl) {
                 }
 
                 ctx.putImageData(imgData, 0, 0);
-                const transparentPng = canvas.toDataURL('image/png');
-                resolve(transparentPng);
+                let resultUrl = canvas.toDataURL('image/png');
+                try {
+                    const webpUrl = canvas.toDataURL('image/webp', 0.85);
+                    if (webpUrl && webpUrl.startsWith('data:image/webp') && webpUrl.length < resultUrl.length) {
+                        resultUrl = webpUrl;
+                    }
+                } catch (_) {}
+                resolve(resultUrl);
             } catch (err) {
                 console.warn('removeBackgroundFromDataUrl fallback:', err);
                 resolve(dataUrl);
@@ -1785,7 +1815,7 @@ async function cleanAllWardrobeBackgrounds() {
             }
         }
 
-        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(state.wardrobe));
+        safeSetLocalWardrobe(state.wardrobe);
         renderWardrobe();
         showToast(`✨ پس‌زمینه ${cleanedCount} لباس در کمد با موفقیت حذف و شفاف شد!`, 'success');
         triggerAutoSync();
@@ -2173,7 +2203,7 @@ async function deleteWardrobeItem(id) {
     } catch (_) {}
 
     const items = getLocalWardrobe().filter(w => w.id != id);
-    localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(items));
+    safeSetLocalWardrobe(items);
     showToast('لباس با موفقیت از کمد حذف شد.', 'success');
     await loadWardrobe();
     triggerAutoSync();
@@ -3097,7 +3127,7 @@ async function applySyncedData(payload, showSuccessToast = true) {
     // 1. Wardrobe Items (with photos)
     if (Array.isArray(payload.wardrobe) && payload.wardrobe.length > 0) {
         state.wardrobe = payload.wardrobe;
-        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(payload.wardrobe));
+        safeSetLocalWardrobe(payload.wardrobe);
         renderWardrobe();
         updateWardrobeCount();
     }
@@ -3201,6 +3231,21 @@ async function pushToCloud(silent = false) {
 
         // 2. Public cloud storage for static GitHub Pages (with strict 5.5s timeout)
         if (!success) {
+            // Keep public KV payload lightweight (< 900 bytes) so api.restful-api.dev does NOT crash with HTTP 500
+            const cloudPayload = {
+                ...payload,
+                wardrobe: (payload.wardrobe || []).map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    category: item.category,
+                    color: item.color,
+                    season: item.season,
+                    image_url: (item.image_url && !item.image_url.startsWith('data:')) 
+                        ? item.image_url 
+                        : getGarmentFallbackImage(item.name, item.category)
+                }))
+            };
+
             const storedObjectId = localStorage.getItem(`wearwise_cloud_obj_${syncKey}`) || (syncKey.length > 20 ? syncKey : null);
             let kvRes = null;
             const controller = new AbortController();
@@ -3214,7 +3259,7 @@ async function pushToCloud(silent = false) {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 name: `wearwise_${syncKey}`,
-                                data: payload
+                                data: cloudPayload
                             }),
                             signal: controller.signal
                         });
@@ -3231,7 +3276,7 @@ async function pushToCloud(silent = false) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             name: `wearwise_${syncKey}`,
-                            data: payload
+                            data: cloudPayload
                         }),
                         signal: controller.signal
                     });
@@ -3506,7 +3551,7 @@ function setupSyncModal() {
         });
     }
 
-    // Quick Sync Code (Copy/Paste text)
+    // Quick Sync Code (Copy/Paste text - 100% Offline & Reliable)
     if (DOM.copySyncCodeBtn) {
         DOM.copySyncCodeBtn.addEventListener('click', () => {
             try {
@@ -3517,21 +3562,66 @@ function setupSyncModal() {
                 }));
                 const quickCode = `WEARWISE:${b64}`;
 
-                navigator.clipboard.writeText(quickCode).then(() => {
-                    showToast('📋 کُد سریع انتقال با موفقیت کپی شد! می‌توانید آن را در پیام‌رسان بفرستید.', 'success');
-                }).catch(() => {
-                    prompt('کُد انتقال کمد شما (کپی کنید):', quickCode);
-                });
+                // Display in textarea
+                if (DOM.syncCodeExportContainer && DOM.syncCodeExportArea) {
+                    DOM.syncCodeExportContainer.style.display = 'block';
+                    DOM.syncCodeExportArea.value = quickCode;
+                    DOM.syncCodeExportArea.select();
+                }
+
+                // Copy to clipboard
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(quickCode).then(() => {
+                        if (DOM.copySuccessNotice) {
+                            DOM.copySuccessNotice.style.display = 'inline';
+                            setTimeout(() => { if (DOM.copySuccessNotice) DOM.copySuccessNotice.style.display = 'none'; }, 4000);
+                        }
+                        showToast('📋 کُد انتقال با موفقیت کپی شد! در پیام‌رسان بفرستید و در گوشی Paste کنید.', 'success');
+                    }).catch(() => {
+                        if (DOM.syncCodeExportArea) {
+                            DOM.syncCodeExportArea.select();
+                            document.execCommand('copy');
+                        }
+                        showToast('📋 کُد انتقال در کادر زیر آماده کپی است.', 'info');
+                    });
+                } else {
+                    if (DOM.syncCodeExportArea) {
+                        DOM.syncCodeExportArea.select();
+                        document.execCommand('copy');
+                    }
+                    showToast('📋 کُد انتقال در کادر زیر نمایش داده شد.', 'info');
+                }
             } catch (err) {
                 showToast('خطا در تولید کُد انتقال: ' + err.message, 'error');
             }
         });
     }
 
-    if (DOM.pasteSyncCodeBtn) {
-        DOM.pasteSyncCodeBtn.addEventListener('click', async () => {
-            const codeInput = prompt('لطفاً کُد سریع انتقال را در این کادر جای‌گذاری (Paste) کنید:');
-            if (!codeInput || !codeInput.trim()) return;
+    if (DOM.copyExportedCodeBtn && DOM.syncCodeExportArea) {
+        DOM.copyExportedCodeBtn.addEventListener('click', () => {
+            DOM.syncCodeExportArea.select();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(DOM.syncCodeExportArea.value);
+            } else {
+                document.execCommand('copy');
+            }
+            if (DOM.copySuccessNotice) {
+                DOM.copySuccessNotice.style.display = 'inline';
+                setTimeout(() => { if (DOM.copySuccessNotice) DOM.copySuccessNotice.style.display = 'none'; }, 4000);
+            }
+            showToast('📋 متن کُد مجدداً کپی شد.', 'success');
+        });
+    }
+
+    // Apply pasted sync code (Directly from textarea - No truncation, No prompt)
+    if (DOM.applySyncCodeBtn) {
+        DOM.applySyncCodeBtn.addEventListener('click', async () => {
+            const codeInput = (DOM.syncCodeImportArea ? DOM.syncCodeImportArea.value : '').trim();
+            if (!codeInput) {
+                showToast('لطفاً ابتدا کُد انتقال را در کادر جای‌گذاری کنید.', 'error');
+                if (DOM.syncCodeImportArea) DOM.syncCodeImportArea.focus();
+                return;
+            }
 
             try {
                 let rawCode = codeInput.trim();
@@ -3545,7 +3635,7 @@ function setupSyncModal() {
                 } else if (rawCode.startsWith('{')) {
                     jsonText = rawCode;
                 } else {
-                    throw new Error('فرمت کُد انتقال نامعتبر است.');
+                    throw new Error('فرمت کُد انتقال نامعتبر است (باید با WEARWISE: شروع شود).');
                 }
 
                 const parsed = JSON.parse(jsonText);
@@ -3559,9 +3649,19 @@ function setupSyncModal() {
                     setSyncKey(parsed.sync_id);
                     updateSyncQrCode();
                 }
+                if (DOM.syncCodeImportArea) DOM.syncCodeImportArea.value = '';
                 showToast('🎉 تمام لباس‌ها، تصاویر، کلید API و تنظیمات با موفقیت منتقل شدند!', 'success');
             } catch (err) {
                 showToast('خطا در اعمال کُد انتقال: ' + err.message, 'error');
+            }
+        });
+    }
+
+    if (DOM.pasteSyncCodeBtn) {
+        DOM.pasteSyncCodeBtn.addEventListener('click', () => {
+            if (DOM.syncCodeImportArea) {
+                DOM.syncCodeImportArea.focus();
+                DOM.syncCodeImportArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         });
     }
@@ -3678,7 +3778,7 @@ async function processImageLocally(file) {
             const rawDataUrl = e.target.result;
             const img = new Image();
             img.onload = async () => {
-                const maxDim = 480;
+                const maxDim = 320;
                 let w = img.width;
                 let h = img.height;
                 if (w > maxDim || h > maxDim) {
@@ -4057,7 +4157,7 @@ function setupPhotoUpload() {
         } else {
             localItems.unshift(newItem);
         }
-        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+        safeSetLocalWardrobe(localItems);
         state.wardrobe = localItems;
 
         showToast('لباس با موفقیت در کمد شخصی شما ثبت گردید!', 'success');
@@ -4306,7 +4406,7 @@ async function submitBulkUpload() {
                 }
                 addedCount++;
             }
-            localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+            safeSetLocalWardrobe(localItems);
             state.wardrobe = localItems;
             showToast(`${addedCount} لباس با موفقیت توسط تحلیلگر مرورگر به کمد شما افزوده شد!`, 'success');
         } catch (err) {
@@ -4511,7 +4611,7 @@ async function submitBulkItemsPayload(items) {
                 localItems.unshift(newItem);
             }
         });
-        localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+        safeSetLocalWardrobe(localItems);
         state.wardrobe = localItems;
         showToast(`${items.length} لباس با موفقیت در کمد شخصی شما ثبت گردید!`, 'success');
     }
@@ -5001,7 +5101,7 @@ function setupEventListeners() {
             } else {
                 localItems.unshift(newItem);
             }
-            localStorage.setItem('wearwise_wardrobe_items', JSON.stringify(localItems));
+            safeSetLocalWardrobe(localItems);
             state.wardrobe = localItems;
         }
 
