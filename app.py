@@ -2009,20 +2009,37 @@ def upload_clothing_photo(file: UploadFile = File(...), auto_save: bool = Form(T
 # -------------------------------------------------------------
 # Smart Garment Classification & Outfit Structure Sanitizer
 # -------------------------------------------------------------
-def classify_item(name: str) -> str:
-    n = (name or "").lower()
-    if any(k in n for k in ['ساعت', 'عینک', 'کلاه', 'شال', 'دستبند', 'کیف', 'کمربند', 'گردنبند']):
-        return 'ACCESSORY'
-    if any(k in n for k in ['کفش', 'کتانی', 'بوت', 'نیم‌بوت', 'صندل', 'لوفر', 'اسنیکرز']):
-        return 'SHOES'
-    if any(k in n for k in ['کاپشن', 'پالتو', 'بارانی', 'ترنچ', 'پافر', 'بادگیر', 'اورکت', 'کت تک', 'کت چرم', 'کت زمستانه']):
+def classify_item(name: str, category: str = "") -> str:
+    n = (name or "").lower().replace('ي', 'ی').replace('ك', 'ک')
+    c = (category or "").lower().replace('ي', 'ی').replace('ك', 'ک')
+
+    # 1. Outerwear (Check first so 'کت جین' or 'کاپشن کلاه‌دار' are always OUTERWEAR!)
+    if any(k in n for k in ['کاپشن', 'پالتو', 'بارانی', 'ترنچ', 'پافر', 'بادگیر', 'اورکت', 'کت تک', 'کت چرم', 'کت جین', 'کت اسپرت', 'جلیقه']) or c in ['کاپشن', 'پالتو']:
         return 'OUTERWEAR'
-    if any(k in n for k in ['شلوار', 'جین', 'کتان', 'اسلش', 'دامن', 'شلوارک', 'بگ', 'مام استایل']):
-        return 'BOTTOM'
-    if any(k in n for k in ['پلیور', 'بافت', 'هودی', 'دورس', 'سویشرت', 'ژاکت', 'یقه اسکی', 'بلوز بافت']):
+
+    # 2. Warm Tops (pullover, hoodie, sweatshirt, knitwear)
+    if any(k in n for k in ['پلیور', 'هودی', 'بافت', 'دورس', 'سویشرت', 'ژاکت', 'یقه اسکی']) or c in ['پلیور', 'هودی', 'بافت', 'دورس']:
         return 'WARM_TOP'
-    if any(k in n for k in ['تیشرت', 'تی‌شرت', 'پلوشرت', 'پولوشرت', 'پیراهن', 'تاپ', 'بلوز', 'شومیز']):
+
+    # 3. Base Tops (t-shirt, button-down shirt, polo, blouse)
+    if any(k in n for k in ['تیشرت', 'تی‌شرت', 'پلوشرت', 'پولوشرت', 'پیراهن', 'شومیز', 'تاپ', 'بلوز']) or c in ['تیشرت', 'پیراهن', 'شومیز']:
         return 'BASE_TOP'
+
+    # 4. Footwear
+    if any(k in n for k in ['کفش', 'کتانی', 'بوت', 'نیم‌بوت', 'صندل', 'لوفر', 'اسنیکرز', 'پوتین']) or c in ['کفش', 'کتانی', 'shoes']:
+        return 'SHOES'
+
+    # 5. Bottoms (pants, jeans, skirts)
+    if any(k in n for k in ['شلوار', 'دامن', 'اسلش', 'شلوارک']) or c in ['شلوار', 'دامن']:
+        return 'BOTTOM'
+    if any(k in n for k in ['جین', 'کتان', 'بگ', 'مام استایل', 'کارگو']):
+        return 'BOTTOM'
+
+    # 6. Accessories (hats, watches, glasses, belts, bags, scarves)
+    is_hat = ('کلاه' in n) and ('کلاه‌دار' not in n) and ('کلاه دار' not in n)
+    if is_hat or any(k in n for k in ['ساعت', 'عینک', 'دستبند', 'کیف', 'کمربند', 'گردنبند', 'شال گردن', 'شال‌گردن']) or c in ['اکسسوری', 'accessory']:
+        return 'ACCESSORY'
+
     return 'OTHER'
 
 def sanitize_outfits_structure(outfits: List[Dict[str, Any]], wardrobe_names: Optional[List[str]] = None, gender: str = "unisex") -> List[Dict[str, Any]]:
@@ -2068,8 +2085,8 @@ def sanitize_outfits_structure(outfits: List[Dict[str, Any]], wardrobe_names: Op
             w_base = [x for x in slots['BASE_TOP'] if x in from_w or x in wardrobe_set]
             chosen_base = w_base[0] if w_base else slots['BASE_TOP'][0]
         elif len(slots['WARM_TOP']) > 1 and not chosen_base:
-            # If 2 warm tops and no base top, replace the duplicate with an inner shirt
-            chosen_base = 'بلوز نخی زنانه' if gender == 'female' else 'پیراهن نخی زیرپلیور'
+            # If 2 warm tops and no base top, replace the duplicate with an inner shirt (NO word pullover!)
+            chosen_base = 'بلوز نخی زنانه' if gender == 'female' else 'پیراهن آستین بلند نخی'
 
         if chosen_base:
             final_items.append(chosen_base)
@@ -2451,8 +2468,15 @@ def get_outfit_recommendations(req: RecommendationRequest):
             general_names = [g.strip() for g in outfit.get("general_suggestions", [])]
             raw_items = outfit.get("items", []) or (wardrobe_names + general_names)
 
+            seen_slots = set()
             for item_name in raw_items:
                 item_clean = item_name.strip()
+                item_slot = classify_item(item_clean)
+                if item_slot == "WARM_TOP":
+                    if "WARM_TOP" in seen_slots:
+                        continue
+                    seen_slots.add("WARM_TOP")
+
                 matched = next((w for w in all_wardrobe if w["name"] == item_clean or item_clean in w["name"]), None)
                 is_w = (item_clean in wardrobe_names) or (matched is not None and not general_names)
                 
