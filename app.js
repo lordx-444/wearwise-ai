@@ -1836,11 +1836,19 @@ function findMatchingWardrobeItem(itemName, wardrobeList) {
     const cleanStr = (s) => (s || '').trim().toLowerCase().replace(/[،\-–—_().]/g, ' ');
     const target = cleanStr(itemName);
     const targetWords = target.split(/\s+/).filter(w => w.length > 1);
+    const targetIsWarm = ['پلیور', 'هودی', 'بافت', 'دورس', 'سویشرت'].some(k => target.includes(k));
 
     // 1. Direct equality or substring
     for (const w of wardrobeList) {
         if (!w || !w.name) continue;
         const wn = cleanStr(w.name);
+        const wCat = cleanStr(w.category || '');
+        const wIsWarm = ['پلیور', 'هودی', 'بافت', 'دورس', 'سویشرت'].some(k => wn.includes(k) || wCat.includes(k));
+
+        // Strict guard: Non-warm items (shirts, t-shirts, pants) must never match a pullover/hoodie!
+        if (!targetIsWarm && wIsWarm) continue;
+        if (targetIsWarm && !wIsWarm) continue;
+
         if (wn === target || wn.includes(target) || target.includes(wn)) {
             return w;
         }
@@ -1856,6 +1864,11 @@ function findMatchingWardrobeItem(itemName, wardrobeList) {
         if (!w || !w.name) continue;
         const wn = cleanStr(w.name);
         const wCategory = cleanStr(w.category || '');
+        const wIsWarm = ['پلیور', 'هودی', 'بافت', 'دورس', 'سویشرت'].some(k => wn.includes(k) || wCategory.includes(k));
+
+        if (!targetIsWarm && wIsWarm) continue;
+        if (targetIsWarm && !wIsWarm) continue;
+
         const wWords = wn.split(/\s+/).filter(x => x.length > 1);
 
         let score = 0;
@@ -1886,26 +1899,44 @@ function findMatchingWardrobeItem(itemName, wardrobeList) {
 // ============================================================
 // Intelligent Wardrobe Item Classification & Sanitizer Engine
 // ============================================================
-function classifyGarmentItem(name) {
-    const n = (name || '').toLowerCase();
-    if (['ساعت', 'عینک', 'کلاه', 'شال', 'دستبند', 'کیف', 'کمربند', 'گردنبند'].some(k => n.includes(k))) {
-        return 'ACCESSORY';
-    }
-    if (['کفش', 'کتانی', 'بوت', 'نیم‌بوت', 'صندل', 'لوفر', 'اسنیکرز'].some(k => n.includes(k))) {
-        return 'SHOES';
-    }
-    if (['کاپشن', 'پالتو', 'بارانی', 'ترنچ', 'پافر', 'بادگیر', 'اورکت', 'کت تک', 'کت چرم', 'کت زمستانه'].some(k => n.includes(k))) {
+function classifyGarmentItem(name, category = '') {
+    const n = (name || '').toLowerCase().replace('ي', 'ی').replace('ك', 'ک');
+    const c = (category || '').toLowerCase().replace('ي', 'ی').replace('ك', 'ک');
+
+    // 1. Outerwear (Check first so 'کت جین' or 'کاپشن کلاه‌دار' are always OUTERWEAR!)
+    if (['کاپشن', 'پالتو', 'بارانی', 'ترنچ', 'پافر', 'بادگیر', 'اورکت', 'کت تک', 'کت چرم', 'کت جین', 'کت اسپرت', 'جلیقه'].some(k => n.includes(k)) || ['کاپشن', 'پالتو'].includes(c)) {
         return 'OUTERWEAR';
     }
-    if (['شلوار', 'جین', 'کتان', 'اسلش', 'دامن', 'شلوارک', 'بگ', 'مام استایل'].some(k => n.includes(k))) {
-        return 'BOTTOM';
-    }
-    if (['پلیور', 'بافت', 'هودی', 'دورس', 'سویشرت', 'ژاکت', 'یقه اسکی', 'بلوز بافت'].some(k => n.includes(k))) {
+
+    // 2. Warm Tops (pullover, hoodie, sweatshirt, knitwear)
+    if (['پلیور', 'هودی', 'بافت', 'دورس', 'سویشرت', 'ژاکت', 'یقه اسکی'].some(k => n.includes(k)) || ['پلیور', 'هودی', 'بافت', 'دورس'].includes(c)) {
         return 'WARM_TOP';
     }
-    if (['تیشرت', 'تی‌شرت', 'پلوشرت', 'پولوشرت', 'پیراهن', 'تاپ', 'بلوز', 'شومیز'].some(k => n.includes(k))) {
+
+    // 3. Base Tops (t-shirt, button-down shirt, polo, blouse)
+    if (['تیشرت', 'تی‌شرت', 'پلوشرت', 'پولوشرت', 'پیراهن', 'شومیز', 'تاپ', 'بلوز'].some(k => n.includes(k)) || ['تیشرت', 'پیراهن', 'شومیز'].includes(c)) {
         return 'BASE_TOP';
     }
+
+    // 4. Footwear
+    if (['کفش', 'کتانی', 'بوت', 'نیم‌بوت', 'صندل', 'لوفر', 'اسنیکرز', 'پوتین'].some(k => n.includes(k)) || ['کفش', 'کتانی', 'shoes'].includes(c)) {
+        return 'SHOES';
+    }
+
+    // 5. Bottoms (pants, jeans, skirts)
+    if (['شلوار', 'دامن', 'اسلش', 'شلوارک'].some(k => n.includes(k)) || ['شلوار', 'دامن'].includes(c)) {
+        return 'BOTTOM';
+    }
+    if (['جین', 'کتان', 'بگ', 'مام استایل', 'کارگو'].some(k => n.includes(k))) {
+        return 'BOTTOM';
+    }
+
+    // 6. Accessories (hats, watches, glasses, belts, bags, scarves)
+    const isHat = n.includes('کلاه') && !n.includes('کلاه‌دار') && !n.includes('کلاه دار');
+    if (isHat || ['ساعت', 'عینک', 'دستبند', 'کیف', 'کمربند', 'گردنبند', 'شال گردن', 'شال‌گردن'].some(k => n.includes(k)) || ['اکسسوری', 'accessory'].includes(c)) {
+        return 'ACCESSORY';
+    }
+
     return 'OTHER';
 }
 
@@ -1955,8 +1986,8 @@ function sanitizeOutfitsStructure(outfits, wardrobeList = null) {
             const wBase = slots.BASE_TOP.filter(x => fromWSet.has(x) || wardrobeSet.has(x));
             chosenBase = wBase.length > 0 ? wBase[0] : slots.BASE_TOP[0];
         } else if (slots.WARM_TOP.length > 1 && !chosenBase) {
-            // If there were 2 warm tops and no base top, substitute the duplicate with an inner base layer
-            chosenBase = (gender === 'female') ? 'بلوز نخی یا شومیز' : 'پیراهن نخی زیرپلیور';
+            // If there were 2 warm tops and no base top, substitute the duplicate with an inner shirt (NO word pullover!)
+            chosenBase = (gender === 'female') ? 'بلوز نخی زنانه' : 'پیراهن آستین بلند نخی';
         }
 
         if (chosenBase) finalItems.push(chosenBase);
@@ -2723,8 +2754,8 @@ function renderRecommendations(data) {
         // High quality mannequin display image
         const outfitImg = getMannequinOutfitImage(outfit, state.style, index);
 
-        // Build Pieces Breakdown with photos & isolated cutouts
-        const pieces = outfit.pieces || (outfit.items || []).map(itemName => {
+        // Build Pieces Breakdown with photos & isolated cutouts strictly from sanitized outfit.items
+        let pieces = (outfit.items || []).map(itemName => {
             const matchedW = findMatchingWardrobeItem(itemName, state.wardrobe);
             const isWardrobe = (outfit.from_wardrobe || []).includes(itemName) || Boolean(matchedW);
             return {
@@ -2732,6 +2763,26 @@ function renderRecommendations(data) {
                 is_wardrobe: isWardrobe,
                 image_url: matchedW?.image_url || getGarmentFallbackImage(itemName)
             };
+        });
+
+        // Strict piece-level deduplication: Never allow 2 pullovers/hoodies, 2 bottoms, or 2 shoes in the same card!
+        const seenSlots = new Set();
+        pieces = pieces.filter(p => {
+            const cat = classifyGarmentItem(p.name);
+            if (cat === 'WARM_TOP') {
+                if (seenSlots.has('WARM_TOP')) return false;
+                seenSlots.add('WARM_TOP');
+            } else if (cat === 'OUTERWEAR') {
+                if (seenSlots.has('OUTERWEAR')) return false;
+                seenSlots.add('OUTERWEAR');
+            } else if (cat === 'BOTTOM') {
+                if (seenSlots.has('BOTTOM')) return false;
+                seenSlots.add('BOTTOM');
+            } else if (cat === 'SHOES') {
+                if (seenSlots.has('SHOES')) return false;
+                seenSlots.add('SHOES');
+            }
+            return true;
         });
 
         const piecesHtml = pieces.map(p => `
